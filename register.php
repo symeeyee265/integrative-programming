@@ -81,6 +81,8 @@ function sanitize_address($str) {
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     // Get and sanitize input data
     $full_name = htmlspecialchars(trim($_POST['full_name']), ENT_QUOTES, 'UTF-8');
+    $full_name = preg_replace('/[^a-zA-Z ]/', '', $full_name);
+    $full_name = strtoupper($full_name);
     $student_id = htmlspecialchars(trim($_POST['student_id']), ENT_QUOTES, 'UTF-8');
     $email = sanitize_email(trim($_POST['email']));
     $program = htmlspecialchars(trim($_POST['program']), ENT_QUOTES, 'UTF-8');
@@ -128,6 +130,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     if (empty($student_status)) $errors[] = "Student status is required.";
     if (empty($billing_address)) $errors[] = "Billing address is required.";
     if (empty($current_address)) $errors[] = "Current address is required.";
+
+    // Student ID must contain both letters and numbers
+    if (!preg_match('/[a-zA-Z]/', $student_id) || !preg_match('/[0-9]/', $student_id)) {
+        $errors[] = "Student ID must contain both letters and numbers.";
+    }
 
     // Verify reCAPTCHA v3
     if (!empty($recaptcha_response)) {
@@ -541,13 +548,13 @@ if ($success) {
             <form action="register.php" method="post" id="registrationForm">
                 <div class="form-group">
                     <label for="full-name" class="required">Full Name</label>
-                    <input type="text" id="full-name" name="full_name" required oninput="validateInput(this, 'full_name'); this.value = this.value.toUpperCase()">
+                    <input type="text" id="full-name" name="full_name" required oninput="validateInput(this, 'full_name'); this.value = this.value.replace(/[^a-zA-Z ]/g, '').toUpperCase()">
                     <span class="feedback" id="full_name_feedback"></span>
                 </div>
 
                 <div class="form-group">
                     <label for="student-id" class="required">Student ID</label>
-                    <input type="text" id="student-id" name="student_id" required oninput="validateInput(this,'student_id'); this.value = this.value.toUpperCase()">
+                    <input type="text" id="student-id" name="student_id" required oninput="validateInput(this,'student_id')">
                     <span class="feedback" id="student_id_feedback"></span>
                 </div>
 
@@ -561,12 +568,12 @@ if ($success) {
                     <label for="program" class="required">Program of Study</label>
                     <select id="program" name="program" required onchange="validateInput(this, 'program')">
                         <option value="">Select your program</option>
-                        <option value="Computer Science" <?php if (isset($_POST['program']) && $_POST['program'] === 'Computer Science') echo'selected';?>>Computer Science</option>
-                        <option value="Engineering" <?php if (isset($_POST['program']) && $_POST['program'] === 'Engineering') echo'selected';?>>Engineering</option>
-                        <option value="Business" <?php if (isset($_POST['program']) && $_POST['program'] === 'Business') echo'selected';?>>Business</option>
-                        <option value="Arts & Humanities" <?php if (isset($_POST['program']) && $_POST['program'] === 'Arts & Humanities') echo'selected';?>>Arts & Humanities</option>
-                        <option value="Natural Sciences" <?php if (isset($_POST['program']) && $_POST['program'] === 'Natural Sciences') echo'selected';?>>Natural Sciences</option>
-                        <option value="Other" <?php if (isset($_POST['program']) && $_POST['program'] === 'Other') echo'selected';?>>Other</option>
+                        <option value="Computer Science" <?php if (isset($_POST['program']) && $_POST['program'] === 'Computer Science') echo 'selected';?>>Computer Science</option>
+                        <option value="Engineering" <?php if (isset($_POST['program']) && $_POST['program'] === 'Engineering') echo 'selected';?>>Engineering</option>
+                        <option value="Business" <?php if (isset($_POST['program']) && $_POST['program'] === 'Business') echo 'selected';?>>Business</option>
+                        <option value="Arts & Humanities" <?php if (isset($_POST['program']) && $_POST['program'] === 'Arts & Humanities') echo 'selected';?>>Arts & Humanities</option>
+                        <option value="Natural Sciences" <?php if (isset($_POST['program']) && $_POST['program'] === 'Natural Sciences') echo 'selected';?>>Natural Sciences</option>
+                        <option value="Other" <?php if (isset($_POST['program']) && $_POST['program'] === 'Other') echo 'selected';?>>Other</option>
                     </select>
                     <span class="feedback" id="program_feedback"></span>
                 </div>
@@ -684,10 +691,16 @@ if ($success) {
             } else if (input.type === 'text' || input.type === 'textarea') {
                 if (value === '') {
                     errorMessage = 'This field is required.';
-                } else if (fieldName === 'full_name' || fieldName ==='student_id' || fieldName === 'program' || fieldName ==='student_status') {
-                    const specialCharRegex = /[^a-zA-Z0-9 \-_]/;
+                } else if (fieldName === 'full_name') {
+                    const specialCharRegex = /[^a-zA-Z ]/;
                     if (specialCharRegex.test(value)) {
                         errorMessage = `Please don't put special character in ${fieldName.replace('_','')}`;
+                    }
+                } else if (fieldName ==='student_id') {
+                    const letterRegex = /[a-zA-Z]/;
+                    const numberRegex = /[0-9]/;
+                    if (!letterRegex.test(value) || !numberRegex.test(value)) {
+                        errorMessage = 'Student ID must contain both letters and numbers.';
                     }
                 } else if (fieldName === 'email') {
                     const emailRegex = /^[^\s@]+@[^\s@]+\.com$/;
