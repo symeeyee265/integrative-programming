@@ -210,6 +210,7 @@ if ($success) {
 ?>
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -241,13 +242,13 @@ if ($success) {
             text-align: center;
         }
 
-        .logo {
+       .logo {
             font-size: 1.5rem;
             font-weight: bold;
             margin-bottom: 0.5rem;
         }
 
-        .logo span {
+       .logo span {
             color: #3498db;
         }
 
@@ -262,7 +263,7 @@ if ($success) {
             font-weight: 500;
         }
 
-        .auth-container {
+       .auth-container {
             max-width: 800px;
             margin: 2rem auto;
             padding: 0 1rem;
@@ -273,7 +274,7 @@ if ($success) {
             justify-content: center;
         }
 
-        .auth-box {
+       .auth-box {
             background: white;
             border-radius: 8px;
             padding: 2rem;
@@ -282,30 +283,31 @@ if ($success) {
             max-width: 400px;
         }
 
-        .auth-box h1 {
+       .auth-box h1 {
             text-align: center;
             color: #1a5276;
             margin-bottom: 1.5rem;
             font-size: 1.5rem;
         }
 
-        .form-group {
+       .form-group {
             margin-bottom: 1.5rem;
         }
 
-        .form-group label {
+       .form-group label {
             display: block;
             margin-bottom: 0.5rem;
             font-weight: 500;
         }
 
-        .form-group label.required::after {
+       .form-group label.required::after {
             content: '*';
             color: red;
             margin-left: 3px;
         }
 
-        .form-group input,.form-group select {
+       .form-group input,
+       .form-group select {
             width: 100%;
             padding: 0.8rem;
             border: 1px solid #ddd;
@@ -313,7 +315,7 @@ if ($success) {
             font-size: 1rem;
         }
 
-        .form-group textarea {
+       .form-group textarea {
             width: 100%;
             padding: 0.8rem;
             border: 1px solid #ddd;
@@ -322,7 +324,7 @@ if ($success) {
             height: 100px; /* Increase the height of textareas */
         }
 
-        .btn {
+       .btn {
             display: block;
             width: 100%;
             padding: 0.8rem;
@@ -336,16 +338,16 @@ if ($success) {
             margin-top: 1rem;
         }
 
-        .btn:hover {
+       .btn:hover {
             background: #2471a3;
         }
 
-        .auth-links {
+       .auth-links {
             margin-top: 1.5rem;
             text-align: center;
         }
 
-        .auth-links a {
+       .auth-links a {
             color: #2980b9;
             text-decoration: none;
             display: block;
@@ -360,18 +362,18 @@ if ($success) {
             margin-top: auto;
         }
 
-        .error {
+       .error {
             color: red;
             text-align: center;
             margin-bottom: 1rem;
         }
 
-        .social-login {
+       .social-login {
             margin-top: 1rem;
             text-align: center;
         }
 
-        .social-login button {
+       .social-login button {
             margin: 0.5rem;
             padding: 0.5rem 1rem;
             border: none;
@@ -380,43 +382,65 @@ if ($success) {
             font-weight: 500;
         }
 
-        .google-btn {
+       .google-btn {
             background: #DB4437;
             color: white;
         }
 
-        .facebook-btn {
+       .facebook-btn {
             background: #4267B2;
             color: white;
         }
 
-        .eligibility-status {
+       .eligibility-status {
             margin: 1rem 0;
             padding: 1rem;
             border-radius: 4px;
         }
 
-        .eligible {
+       .eligible {
             background: #d4edda;
             color: #155724;
         }
 
-        .not-eligible {
+       .not-eligible {
             background: #f8d7da;
             color: #721c24;
         }
 
-        .strength-meter { height: 5px; width: 100%; background: #eee; margin-top: 2px; }
-        .strength-meter-bar { height: 100%; transition: width 0.3s; }
-        .strength-weak { background: #e74c3c; }
-        .strength-medium { background: #f1c40f; }
-        .strength-strong { background: #2ecc71; }
-        .show-hide { cursor: pointer; }
+       .strength-meter {
+            height: 5px;
+            width: 100%;
+            background: #eee;
+            margin-top: 2px;
+        }
 
-        .invalid {
+       .strength-meter-bar {
+            height: 100%;
+            transition: width 0.3s;
+        }
+
+       .strength-weak {
+            background: #e74c3c;
+        }
+
+       .strength-medium {
+            background: #f1c40f;
+        }
+
+       .strength-strong {
+            background: #2ecc71;
+        }
+
+       .show-hide {
+            cursor: pointer;
+        }
+
+       .invalid {
             border: 1px solid red;
         }
-        .valid {
+
+       .valid {
             border: 1px solid green;
         }
 
@@ -470,8 +494,29 @@ if ($success) {
        .error p {
             display: block;
         }
+
+        /* Default input style */
+       .form-input {
+            padding: 10px;
+            border: 2px solid #ccc;
+            border-radius: 4px;
+            width: 200px;
+        }
+
+        /* Valid input (green background) */
+       .valid {
+            background-color: #d4edda;
+            border-color: #28a745;
+        }
+
+        /* Invalid input (red background) */
+       .invalid {
+            background-color: #f8d7da;
+            border-color: #dc3545;
+        }
     </style>
 </head>
+
 <body>
     <header>
         <div class="logo">Edu<span>Vote</span></div>
@@ -594,6 +639,14 @@ if ($success) {
         </div>
     </div>
 
+    <div class="form-group">
+        <div class="<?= $errors? 'error' : ($success? 'success' : '')?>">
+            <input type="text" name="input_field" placeholder="Input field" class="form-input" oninput="validateInput(this)">
+            <i class="fa <?= $errors? 'fa-exclamation-circle' : ($success? 'fa-check-circle' : '')?>"></i>
+            <p><?= $errors[0]?? ''?></p>
+        </div>
+    </div>
+
     <footer>
         <p>&copy; <?= date('Y') ?> EduVote. All rights reserved.</p>
     </footer>
@@ -708,4 +761,5 @@ if ($success) {
         }
     </script>
 </body>
+
 </html>    
