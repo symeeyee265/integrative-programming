@@ -13,18 +13,55 @@ $emailService = new EmailService($conn);
 $oauthService = new OAuthService($conn);
 $eligibilityService = new EligibilityService($conn);
 
+// --- Strategy Pattern Classes ---
+interface ValidationStrategy {
+    public function validate($value): ?string;
+}
+class RequiredValidation implements ValidationStrategy {
+    public function validate($value): ?string {
+        return empty(trim($value)) ? "This field is required." : null;
+    }
+}
+class PasswordStrengthValidation implements ValidationStrategy {
+    public function validate($value): ?string {
+        if (strlen($value) < 8) return "Password must be at least 8 characters.";
+        if (!preg_match('/[A-Z]/', $value)) return "Include an uppercase letter.";
+        if (!preg_match('/[a-z]/', $value)) return "Include a lowercase letter.";
+        if (!preg_match('/[0-9]/', $value)) return "Include a number.";
+        if (!preg_match('/[^a-zA-Z0-9]/', $value)) return "Include a symbol.";
+        return null;
+    }
+}
+class EmailValidation implements ValidationStrategy {
+    public function validate($value): ?string {
+        if (!filter_var($value, FILTER_VALIDATE_EMAIL)) return "Invalid email format.";
+        if (strpos($value, '@') === false || strpos($value, '.') === false) return "Email must contain @ and .";
+        return null;
+    }
+}
+class SecurityAnswerValidation implements ValidationStrategy {
+    public function validate($value): ?string {
+        return preg_match('/[^a-zA-Z0-9 \\-_]/', $value) ? "No special characters allowed." : null;
+    }
+}
+class FieldValidator {
+    private $strategies = [];
+    public function addStrategy(ValidationStrategy $strategy) {
+        $this->strategies[] = $strategy;
+    }
+    public function validate($value): array {
+        $errors = [];
+        foreach ($this->strategies as $strategy) {
+            $error = $strategy->validate($value);
+            if ($error) $errors[] = $error;
+        }
+        return $errors;
+    }
+}
+
 // Helper function to check for special characters (except space, dash, underscore)
 function has_special_char($str) {
     return preg_match('/[^a-zA-Z0-9 \-_]/', $str);
-}
-
-// Helper function for password strength
-function is_strong_password($password) {
-    return strlen($password) >= 8 &&
-        preg_match('/[A-Z]/', $password) &&
-        preg_match('/[a-z]/', $password) &&
-        preg_match('/[0-9]/', $password) &&
-        preg_match('/[^a-zA-Z0-9]/', $password);
 }
 
 // Helper function for email validation
@@ -32,69 +69,70 @@ function is_valid_email($email) {
     return filter_var($email, FILTER_VALIDATE_EMAIL) && strpos($email, '@') !== false && strpos($email, '.') !== false;
 }
 
+// Helper: Only allow certain characters in email
+function sanitize_email($email) {
+    return preg_replace('/[^a-zA-Z0-9@.]/', '', $email);
+}
+
+// Helper: Only allow certain characters in addresses
+function sanitize_address($str) {
+    return preg_replace('/[^a-zA-Z0-9 ,.]/', '', $str);
+}
+
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     // Get and sanitize input data
-    $full_name = trim($_POST['full_name']);
-    $student_id = trim($_POST['student_id']);
-    $email = trim($_POST['email']);
-    $program = trim($_POST['program']);
-    $password = $_POST['password'];
+    $full_name = htmlspecialchars(trim($_POST['full_name']), ENT_QUOTES, 'UTF-8');
+    $student_id = htmlspecialchars(trim($_POST['student_id']), ENT_QUOTES, 'UTF-8');
+    $email = sanitize_email(trim($_POST['email']));
+    $program = htmlspecialchars(trim($_POST['program']), ENT_QUOTES, 'UTF-8');
+    $password = $_POST['password']; // Don't sanitize password
     $confirm_password = $_POST['confirm_password'];
-    $date_of_birth = trim($_POST['date_of_birth']);
-    $student_status = trim($_POST['student_status']);
+    $date_of_birth = htmlspecialchars(trim($_POST['date_of_birth']), ENT_QUOTES, 'UTF-8');
+    $student_status = htmlspecialchars(trim($_POST['student_status']), ENT_QUOTES, 'UTF-8');
+    $billing_address = sanitize_address(trim($_POST['billing_address']));
+    $current_address = sanitize_address(trim($_POST['current_address']));
     $recaptcha_response = $_POST['g-recaptcha-response'] ?? '';
 
-    // Validate for special characters (except password)
-    if (has_special_char($full_name) || has_special_char($student_id) || has_special_char($program) || has_special_char($student_status)) {
-        $errors[] = "Please don't put special character";
-    }
+    // Length restrictions
+    if (strlen($full_name) > 100) $errors[] = "Full name too long.";
+    if (strlen($student_id) > 20) $errors[] = "Student ID too long.";
+    if (strlen($email) > 100) $errors[] = "Email too long.";
+    if (strlen($program) > 50) $errors[] = "Program too long.";
+    if (strlen($billing_address) > 255) $errors[] = "Billing address too long.";
+    if (strlen($current_address) > 255) $errors[] = "Current address too long.";
 
-    // Validate email
-    if (!is_valid_email($email)) {
-        $errors[] = "Please enter a valid email address.";
-    }
+    // Special character validation
+    if (has_special_char($full_name)) $errors[] = "Please don't put special character in Full Name.";
+    if (has_special_char($student_id)) $errors[] = "Please don't put special character in Student ID.";
+    if (has_special_char($program)) $errors[] = "Please don't put special character in Program.";
+    if (has_special_char($student_status)) $errors[] = "Please don't put special character in Student Status.";
 
-    // Validate password strength
-    if (!is_strong_password($password)) {
+    // Email validation
+    if (!is_valid_email($email)) $errors[] = "Please enter a valid email address.";
+
+    // Password validation (example: at least 8 chars, upper, lower, number, symbol)
+    if (strlen($password) < 8 ||
+        !preg_match('/[A-Z]/', $password) ||
+        !preg_match('/[a-z]/', $password) ||
+        !preg_match('/[0-9]/', $password) ||
+        !preg_match('/[^a-zA-Z0-9]/', $password)) {
         $errors[] = "Password must be at least 8 characters and include uppercase, lowercase, number, and symbol.";
     }
+    if ($password !== $confirm_password) $errors[] = "Passwords do not match.";
 
-    // Validate password match
-    if ($password !== $confirm_password) {
-        $errors[] = "Passwords do not match.";
-    }
-
-    // Validate required fields
-    if (empty($full_name)) {
-        $errors[] = "Full name is required.";
-    }
-    if (empty($student_id)) {
-        $errors[] = "Student ID is required.";
-    }
-    if (empty($email)) {
-        $errors[] = "Email is required.";
-    }
-    if (empty($program)) {
-        $errors[] = "Program of study is required.";
-    }
-    if (empty($date_of_birth)) {
-        $errors[] = "Date of birth is required.";
-    }
-    if (empty($student_status)) {
-        $errors[] = "Student status is required.";
-    }
-
-    // Sanitize all inputs except password
-    $full_name = htmlspecialchars($full_name, ENT_QUOTES, 'UTF-8');
-    $student_id = htmlspecialchars($student_id, ENT_QUOTES, 'UTF-8');
-    $email = htmlspecialchars($email, ENT_QUOTES, 'UTF-8');
-    $program = htmlspecialchars($program, ENT_QUOTES, 'UTF-8');
-    $date_of_birth = htmlspecialchars($date_of_birth, ENT_QUOTES, 'UTF-8');
-    $student_status = htmlspecialchars($student_status, ENT_QUOTES, 'UTF-8');
+    // Required fields
+    if (empty($full_name)) $errors[] = "Full name is required.";
+    if (empty($student_id)) $errors[] = "Student ID is required.";
+    if (empty($email)) $errors[] = "Email is required.";
+    if (empty($program)) $errors[] = "Program of study is required.";
+    if (empty($date_of_birth)) $errors[] = "Date of birth is required.";
+    if (empty($student_status)) $errors[] = "Student status is required.";
+    if (empty($billing_address)) $errors[] = "Billing address is required.";
+    if (empty($current_address)) $errors[] = "Current address is required.";
 
     // Verify reCAPTCHA v3
     if (!empty($recaptcha_response)) {
-        $recaptcha_secret = 'YOUR_SECRET_KEY';
+        $recaptcha_secret = '6LfLcC0rAAAAALHgWE2Vo4ogBMtPTomQ7w2mmi92';
         $recaptcha_verify = file_get_contents("https://www.google.com/recaptcha/api/siteverify?secret={$recaptcha_secret}&response={$recaptcha_response}");
         $recaptcha_data = json_decode($recaptcha_verify);
         // Set a score threshold (0.5 in this example)
@@ -136,12 +174,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             $stmt = $conn->prepare("
                 INSERT INTO users (
                     student_id, password, full_name, email, program, is_admin,
-                    date_of_birth, student_status
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    date_of_birth, student_status, billing_address, current_address
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
             $stmt->execute([
                 $student_id, $hashed_password, $full_name, $email, $program, $is_admin,
-                $date_of_birth, $student_status
+                $date_of_birth, $student_status, $billing_address, $current_address
             ]);
 
             $userId = $conn->lastInsertId();
@@ -158,6 +196,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             $errors[] = "Registration failed. Please try again.";
         }
     }
+
+    $securityAnswerValidator = new FieldValidator();
+    $securityAnswerValidator->addStrategy(new RequiredValidation());
+    $securityAnswerValidator->addStrategy(new SecurityAnswerValidation());
+    $securityAnswerErrors = $securityAnswerValidator->validate($_POST['security_answer']);
 }
 
 // After successful registration, show a message and redirect
@@ -347,6 +390,13 @@ if ($success) {
             background: #f8d7da;
             color: #721c24;
         }
+
+        .strength-meter { height: 5px; width: 100%; background: #eee; margin-top: 2px; }
+        .strength-meter-bar { height: 100%; transition: width 0.3s; }
+        .strength-weak { background: #e74c3c; }
+        .strength-medium { background: #f1c40f; }
+        .strength-strong { background: #2ecc71; }
+        .show-hide { cursor: pointer; }
     </style>
 </head>
 <body>
@@ -402,6 +452,7 @@ if ($success) {
                 <div class="form-group">
                     <label for="password">Password</label>
                     <input type="password" id="password" name="password" required>
+                    <span class="show-hide" onclick="togglePassword()">👁️</span>
                 </div>
 
                 <div class="form-group">
@@ -423,6 +474,36 @@ if ($success) {
                     </select>
                 </div>
 
+                <div class="form-group">
+                    <label for="security-question">Security Question</label>
+                    <select id="security-question" name="security_question" required>
+                        <option value="">Select a question</option>
+                        <option value="What is your mother's maiden name?">What is your mother's maiden name?</option>
+                        <option value="What was your first pet's name?">What was your first pet's name?</option>
+                        <option value="What is your favorite book?">What is your favorite book?</option>
+                        <option value="What city were you born in?">What city were you born in?</option>
+                    </select>
+                    <span class="feedback" id="securityQuestionFeedback"></span>
+                </div>
+
+                <div class="form-group">
+                    <label for="security-answer">Security Answer</label>
+                    <input type="text" id="security-answer" name="security_answer" maxlength="255" required>
+                    <span class="feedback" id="securityAnswerFeedback"></span>
+                </div>
+
+                <div class="form-group">
+                    <label for="billing-address">Billing Address</label>
+                    <textarea id="billing-address" name="billing_address" maxlength="255" required></textarea>
+                    <span class="feedback" id="billingAddressFeedback"></span>
+                </div>
+
+                <div class="form-group">
+                    <label for="current-address">Current Address</label>
+                    <textarea id="current-address" name="current_address" maxlength="255" required></textarea>
+                    <span class="feedback" id="currentAddressFeedback"></span>
+                </div>
+
                 <button type="submit" class="btn">Register</button>
             </form>
 
@@ -440,7 +521,7 @@ if ($success) {
         document.getElementById('registrationForm').addEventListener('submit', function (e) {
             e.preventDefault();
             grecaptcha.ready(function () {
-                grecaptcha.execute('YOUR_SITE_KEY', {action:'register'}).then(function (token) {
+                grecaptcha.execute('6LfLcC0rAAAAAG3ZmASAUwWVyYf4dY4GBNmZRZFj', {action:'register'}).then(function (token) {
                     var form = document.getElementById('registrationForm');
                     var input = document.createElement('input');
                     input.type = 'hidden';
@@ -450,6 +531,47 @@ if ($success) {
                     form.submit();
                 });
             });
+        });
+
+        // Password show/hide
+        function togglePassword() {
+            var pwd = document.getElementById('password');
+            pwd.type = pwd.type === 'password' ? 'text' : 'password';
+        }
+
+        // Password strength meter and validation
+        const password = document.getElementById('password');
+        const strengthBar = document.getElementById('strengthBar');
+        const passwordError = document.getElementById('passwordError');
+        password.addEventListener('input', function() {
+            const val = password.value;
+            let strength = 0;
+            if (val.length >= 8) strength++;
+            if (/[A-Z]/.test(val)) strength++;
+            if (/[a-z]/.test(val)) strength++;
+            if (/[0-9]/.test(val)) strength++;
+            if (/[^a-zA-Z0-9]/.test(val)) strength++;
+            // Meter
+            strengthBar.style.width = (strength * 20) + '%';
+            strengthBar.className = 'strength-meter-bar';
+            if (strength <= 2) strengthBar.classList.add('strength-weak');
+            else if (strength === 3 || strength === 4) strengthBar.classList.add('strength-medium');
+            else strengthBar.classList.add('strength-strong');
+            // Real-time feedback
+            if (val.length < 8) passwordError.textContent = 'Password must be at least 8 characters.';
+            else if (!/[A-Z]/.test(val)) passwordError.textContent = 'Include an uppercase letter.';
+            else if (!/[a-z]/.test(val)) passwordError.textContent = 'Include a lowercase letter.';
+            else if (!/[0-9]/.test(val)) passwordError.textContent = 'Include a number.';
+            else if (!/[^a-zA-Z0-9]/.test(val)) passwordError.textContent = 'Include a symbol.';
+            else passwordError.textContent = '';
+        });
+        // Confirm password real-time
+        document.getElementById('confirm-password').addEventListener('input', function() {
+            if (this.value !== password.value) {
+                document.getElementById('confirmPasswordError').textContent = 'Passwords do not match.';
+            } else {
+                document.getElementById('confirmPasswordError').textContent = '';
+            }
         });
     </script>
 </body>
