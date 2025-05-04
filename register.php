@@ -34,8 +34,7 @@ class PasswordStrengthValidation implements ValidationStrategy {
 }
 class EmailValidation implements ValidationStrategy {
     public function validate($value): ?string {
-        if (!filter_var($value, FILTER_VALIDATE_EMAIL)) return "Invalid email format.";
-        if (strpos($value, '@') === false || strpos($value, '.') === false) return "Email must contain @ and .";
+        if (!filter_var($value, FILTER_VALIDATE_EMAIL) ||!str_ends_with($value, '@.com')) return "Invalid email format. Email must end with @.com";
         return null;
     }
 }
@@ -66,7 +65,7 @@ function has_special_char($str) {
 
 // Helper function for email validation
 function is_valid_email($email) {
-    return filter_var($email, FILTER_VALIDATE_EMAIL) && strpos($email, '@')!== false && strpos($email, '.')!== false;
+    return filter_var($email, FILTER_VALIDATE_EMAIL) && str_ends_with($email, '@.com');
 }
 
 // Helper: Only allow certain characters in email
@@ -108,7 +107,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     if (has_special_char($student_status)) $errors[] = "Please don't put special character in Student Status.";
 
     // Email validation
-    if (!is_valid_email($email)) $errors[] = "Please enter a valid email address.";
+    if (!is_valid_email($email)) $errors[] = "Please enter a valid email address ending with @.com.";
 
     // Password validation (example: at least 8 chars, upper, lower, number, symbol)
     if (strlen($password) < 8 ||
@@ -216,6 +215,7 @@ if ($success) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Student Registration - EduVote</title>
     <script src="https://www.google.com/recaptcha/api.js?render=YOUR_SITE_KEY"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
     <style>
         /* Reuse the same styles from login.php for consistency */
         * {
@@ -299,12 +299,27 @@ if ($success) {
             font-weight: 500;
         }
 
+        .form-group label.required::after {
+            content: '*';
+            color: red;
+            margin-left: 3px;
+        }
+
         .form-group input,.form-group select {
             width: 100%;
             padding: 0.8rem;
             border: 1px solid #ddd;
             border-radius: 4px;
             font-size: 1rem;
+        }
+
+        .form-group textarea {
+            width: 100%;
+            padding: 0.8rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 1rem;
+            height: 100px; /* Increase the height of textareas */
         }
 
         .btn {
@@ -397,6 +412,64 @@ if ($success) {
         .strength-medium { background: #f1c40f; }
         .strength-strong { background: #2ecc71; }
         .show-hide { cursor: pointer; }
+
+        .invalid {
+            border: 1px solid red;
+        }
+        .valid {
+            border: 1px solid green;
+        }
+
+        form {
+            width: 300px;
+            margin: 0 auto;
+        }
+
+        input {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #ccc;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+
+       .error input {
+            border-color: red;
+        }
+
+       .success input {
+            border-color: green;
+        }
+
+        i {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 20px;
+        }
+
+       .error i {
+            color: red;
+        }
+
+       .success i {
+            color: green;
+        }
+
+        p {
+            background-color: red;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            margin: 0;
+            display: none;
+        }
+
+       .error p {
+            display: block;
+        }
     </style>
 </head>
 <body>
@@ -422,59 +495,59 @@ if ($success) {
 
             <form action="register.php" method="post" id="registrationForm">
                 <div class="form-group">
-                    <label for="full-name">Full Name</label>
-                    <input type="text" id="full-name" name="full_name" required oninput="validateInput(this, 'full_name')">
+                    <label for="full-name" class="required">Full Name</label>
+                    <input type="text" id="full-name" name="full_name" required oninput="validateInput(this, 'full_name'); this.value = this.value.toUpperCase()">
                     <span class="feedback" id="full_name_feedback"></span>
                 </div>
 
                 <div class="form-group">
-                    <label for="student-id">Student ID</label>
-                    <input type="text" id="student-id" name="student_id" required oninput="validateInput(this, 'student_id')">
+                    <label for="student-id" class="required">Student ID</label>
+                    <input type="text" id="student-id" name="student_id" required oninput="validateInput(this,'student_id'); this.value = this.value.toUpperCase()">
                     <span class="feedback" id="student_id_feedback"></span>
                 </div>
 
                 <div class="form-group">
-                    <label for="email">Email</label>
+                    <label for="email" class="required">Email</label>
                     <input type="email" id="email" name="email" required oninput="validateInput(this, 'email')">
                     <span class="feedback" id="email_feedback"></span>
                 </div>
 
                 <div class="form-group">
-                    <label for="program">Program of Study</label>
+                    <label for="program" class="required">Program of Study</label>
                     <select id="program" name="program" required onchange="validateInput(this, 'program')">
                         <option value="">Select your program</option>
-                        <option value="Computer Science" <?php if (isset($_POST['program']) && $_POST['program'] === 'Computer Science') echo 'selected';?>>Computer Science</option>
-                        <option value="Engineering" <?php if (isset($_POST['program']) && $_POST['program'] === 'Engineering') echo 'selected';?>>Engineering</option>
-                        <option value="Business" <?php if (isset($_POST['program']) && $_POST['program'] === 'Business') echo 'selected';?>>Business</option>
-                        <option value="Arts & Humanities" <?php if (isset($_POST['program']) && $_POST['program'] === 'Arts & Humanities') echo 'selected';?>>Arts & Humanities</option>
-                        <option value="Natural Sciences" <?php if (isset($_POST['program']) && $_POST['program'] === 'Natural Sciences') echo 'selected';?>>Natural Sciences</option>
-                        <option value="Other" <?php if (isset($_POST['program']) && $_POST['program'] === 'Other') echo 'selected';?>>Other</option>
+                        <option value="Computer Science" <?php if (isset($_POST['program']) && $_POST['program'] === 'Computer Science') echo'selected';?>>Computer Science</option>
+                        <option value="Engineering" <?php if (isset($_POST['program']) && $_POST['program'] === 'Engineering') echo'selected';?>>Engineering</option>
+                        <option value="Business" <?php if (isset($_POST['program']) && $_POST['program'] === 'Business') echo'selected';?>>Business</option>
+                        <option value="Arts & Humanities" <?php if (isset($_POST['program']) && $_POST['program'] === 'Arts & Humanities') echo'selected';?>>Arts & Humanities</option>
+                        <option value="Natural Sciences" <?php if (isset($_POST['program']) && $_POST['program'] === 'Natural Sciences') echo'selected';?>>Natural Sciences</option>
+                        <option value="Other" <?php if (isset($_POST['program']) && $_POST['program'] === 'Other') echo'selected';?>>Other</option>
                     </select>
                     <span class="feedback" id="program_feedback"></span>
                 </div>
 
                 <div class="form-group">
-                    <label for="password">Password</label>
+                    <label for="password" class="required">Password</label>
                     <input type="password" id="password" name="password" required oninput="validatePassword()">
                     <span class="show-hide" onclick="togglePassword()">👁️</span>
                     <span class="feedback" id="password_feedback"></span>
                 </div>
 
                 <div class="form-group">
-                    <label for="confirm-password">Confirm Password</label>
+                    <label for="confirm-password" class="required">Confirm Password</label>
                     <input type="password" id="confirm-password" name="confirm_password" required oninput="validateConfirmPassword()">
                     <span class="feedback" id="confirm_password_feedback"></span>
                 </div>
 
                 <div class="form-group">
-                    <label for="date-of-birth">Date of Birth</label>
+                    <label for="date-of-birth" class="required">Date of Birth</label>
                     <input type="date" id="date-of-birth" name="date_of_birth" required oninput="validateInput(this, 'date_of_birth')">
                     <span class="feedback" id="date_of_birth_feedback"></span>
                 </div>
 
                 <div class="form-group">
-                    <label for="student-status">Student Status</label>
-                    <select id="student-status" name="student_status" required onchange="validateInput(this, 'student_status')">
+                    <label for="student-status" class="required">Student Status</label>
+                    <select id="student-status" name="student_status" required onchange="validateInput(this,'student_status')">
                         <option value="">Select Status</option>
                         <option value="Current Student">Current Student</option>
                         <option value="Alumni">Alumni</option>
@@ -483,7 +556,7 @@ if ($success) {
                 </div>
 
                 <div class="form-group">
-                    <label for="security-question">Security Question</label>
+                    <label for="security-question" class="required">Security Question</label>
                     <select id="security-question" name="security_question" required onchange="validateInput(this, 'security_question')">
                         <option value="">Select a question</option>
                         <option value="What is your mother's maiden name?">What is your mother's maiden name?</option>
@@ -495,19 +568,19 @@ if ($success) {
                 </div>
 
                 <div class="form-group">
-                    <label for="security-answer">Security Answer</label>
+                    <label for="security-answer" class="required">Security Answer</label>
                     <input type="text" id="security-answer" name="security_answer" maxlength="255" required oninput="validateInput(this, 'security_answer')">
                     <span class="feedback" id="security_answer_feedback"></span>
                 </div>
 
                 <div class="form-group">
-                    <label for="billing-address">Billing Address</label>
+                    <label for="billing-address" class="required">Billing Address</label>
                     <textarea id="billing-address" name="billing_address" maxlength="255" required oninput="validateInput(this, 'billing_address')"></textarea>
                     <span class="feedback" id="billing_address_feedback"></span>
                 </div>
 
                 <div class="form-group">
-                    <label for="current-address">Current Address</label>
+                    <label for="current-address" class="required">Current Address</label>
                     <textarea id="current-address" name="current_address" maxlength="255" required oninput="validateInput(this, 'current_address')"></textarea>
                     <span class="feedback" id="current_address_feedback"></span>
                 </div>
@@ -558,23 +631,27 @@ if ($success) {
             } else if (input.type === 'text' || input.type === 'textarea') {
                 if (value === '') {
                     errorMessage = 'This field is required.';
-                } else if (fieldName === 'full_name' || fieldName === 'student_id' || fieldName === 'program' || fieldName === 'student_status') {
+                } else if (fieldName === 'full_name' || fieldName ==='student_id' || fieldName === 'program' || fieldName ==='student_status') {
                     const specialCharRegex = /[^a-zA-Z0-9 \-_]/;
                     if (specialCharRegex.test(value)) {
-                        errorMessage = `Please don't put special character in ${fieldName.replace('_', ' ')}`;
+                        errorMessage = `Please don't put special character in ${fieldName.replace('_','')}`;
                     }
                 } else if (fieldName === 'email') {
-                    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                    const emailRegex = /^[^\s@]+@[^\s@]+\.com$/;
                     if (!emailRegex.test(value)) {
-                        errorMessage = 'Please enter a valid email address.';
+                        errorMessage = 'Please enter a valid email address ending with @.com.';
                     }
                 }
             }
 
             if (errorMessage) {
                 feedback.textContent = `⚠️ ${errorMessage}`;
+                input.classList.add('invalid');
+                input.classList.remove('valid');
             } else {
-                feedback.textContent = '✅';
+                feedback.textContent = '';
+                input.classList.add('valid');
+                input.classList.remove('invalid');
             }
         }
 
@@ -605,8 +682,12 @@ if ($success) {
 
             if (errorMessage) {
                 passwordFeedback.textContent = `⚠️ ${errorMessage}`;
+                password.classList.add('invalid');
+                password.classList.remove('valid');
             } else {
-                passwordFeedback.textContent = '✅';
+                passwordFeedback.textContent = '';
+                password.classList.add('valid');
+                password.classList.remove('invalid');
             }
         }
 
@@ -617,8 +698,12 @@ if ($success) {
             const confirmPasswordFeedback = document.getElementById('confirm_password_feedback');
             if (confirmPassword.value!== password.value) {
                 confirmPasswordFeedback.textContent = '⚠️ Passwords do not match.';
+                confirmPassword.classList.add('invalid');
+                confirmPassword.classList.remove('valid');
             } else {
-                confirmPasswordFeedback.textContent = '✅';
+                confirmPasswordFeedback.textContent = '';
+                confirmPassword.classList.add('valid');
+                confirmPassword.classList.remove('invalid');
             }
         }
     </script>
