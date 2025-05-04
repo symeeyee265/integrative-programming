@@ -1,7 +1,7 @@
 <?php
 session_start();
 require_once __DIR__ . '/dbConnection.php';
-//require_once __DIR__ . '/emailService.php';
+require_once __DIR__ . '/emailService.php';
 require_once __DIR__ . '/oauth.php';
 require_once __DIR__ . '/eligibilityCheck.php';
 
@@ -9,7 +9,7 @@ $errors = [];
 $success = false;
 
 // Initialize services
-//$emailService = new EmailService($conn);
+$emailService = new EmailService($conn);
 $oauthService = new OAuthService($conn);
 $eligibilityService = new EligibilityService($conn);
 
@@ -118,25 +118,25 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     // Ensure $email is set from POST data
     $email = isset($_POST['email']) ? $_POST['email'] : '';
 
-    // Helper function for email validation
-    function is_valid_email($email) {
-        return filter_var($email, FILTER_VALIDATE_EMAIL) && preg_match('/@student\.tarc\.edu\.my$/', $email);
-    }
+//    // Helper function for email validation
+//    function is_valid_email($email) {
+//        return filter_var($email, FILTER_VALIDATE_EMAIL) && preg_match('/@student\.tarc\.edu\.my$/', $email);
+//    }
 
-    // Helper: Only allow certain characters in email
-    function sanitize_email($email) {
-        return preg_replace('/[^a-zA-Z0-9@.]/', '', $email);
-    }
+//    // Helper: Only allow certain characters in email
+//    function sanitize_email($email) {
+//        return preg_replace('/[^a-zA-Z0-9@.]/', '', $email);
+//    }
 
-    // Helper: Allow letters, numbers, spaces, commas, periods, and hyphens in addresses
-    function sanitize_address($str) {
-        return preg_replace('/[^a-zA-Z0-9 ,.-]/', '', $str); // Added `-` (hyphen)
-    }
-
-    // New helper function (or modify has_special_char)
-    function has_special_char_billing($str) {
-        return preg_match('/[^a-zA-Z0-9 ,.-]/', $str); // Allow , . -
-    }
+//    // Helper: Allow letters, numbers, spaces, commas, periods, and hyphens in addresses
+//    function sanitize_address($str) {
+//        return preg_replace('/[^a-zA-Z0-9 ,.-]/', '', $str); // Added `-` (hyphen)
+//    }
+//
+//    // New helper function (or modify has_special_char)
+//    function has_special_char_billing($str) {
+//        return preg_match('/[^a-zA-Z0-9 ,.-]/', $str); // Allow , . -
+//    }
 
     // Get and sanitize input data
     $full_name = htmlspecialchars(trim($_POST['full_name']), ENT_QUOTES, 'UTF-8');
@@ -232,7 +232,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
     // Check eligibility
     if (empty($errors)) {
-        $eligibility = $eligibilityService->mockGovernmentAPI($date_of_birth, $student_status, $student_status);
+        $eligibility = $eligibilityService->tarcInstitutionAPI($date_of_birth);
         if (!$eligibility['isEligible']) {
             $errors = array_merge($errors, $eligibility['errors']);
         }
@@ -245,7 +245,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             $stmt->execute([$student_id, $email]);
 
             if ($stmt->rowCount() > 0) {
-                $errors[] = "Student ID or email already registered.";
+                $errors[] = "Student ID or email already registered Please go to Login Page.";
             }
         } catch (PDOException $e) {
             $errors[] = "Database error. Please try again later.";
@@ -293,12 +293,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     }
 }
 
-
-// After successful registration, show a message and redirect
 if ($success) {
     echo "<!DOCTYPE html><html lang='en'><head><meta charset='UTF-8'><meta http-equiv='refresh' content='3;url=login.php'><title>Registration Success</title><style>body{font-family:sans-serif;background:#f5f7fa;display:flex;align-items:center;justify-content:center;height:100vh;} .success-box{background:#fff;padding:2rem 3rem;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,0.1);text-align:center;} .success-box h1{color:#27ae60;} </style></head><body><div class='success-box'><h1>You've signed up successfully.</h1><p>Redirecting to login page...</p></div></body></html>";
     exit();
 }
+
 ?>
 <!DOCTYPE html>
 
@@ -307,7 +306,7 @@ if ($success) {
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Student Registration - EduVote</title>
-        <script src="https://www.google.com/recaptcha/api.js?render=YOUR_SITE_KEY"></script>
+        <script src="https://www.google.com/recaptcha/api.js?render=6LfLcC0rAAAAAG3ZmASAUwWVyYf4dY4GBNmZRZFj"></script>
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
         <style>
             /* Reuse the same styles from login.php for consistency */
@@ -727,11 +726,6 @@ if ($success) {
                     </div>
 
                     <button type="submit" class="btn">Register</button>
-                    if ($success) {
-    echo "<!DOCTYPE html><html lang='en'><head><meta charset='UTF-8'><meta http-equiv='refresh' content='3;url=login.php'><title>Registration Success</title><style>body{font-family:sans-serif;background:#f5f7fa;display:flex;align-items:center;justify-content:center;height:100vh;} .success-box{background:#fff;padding:2rem 3rem;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,0.1);text-align:center;} .success-box h1{color:#27ae60;} </style></head><body><div class='success-box'><h1>You've signed up successfully.</h1><p>Redirecting to login page...</p></div></body></html>";
-    exit();
-}
-
                 </form>
 
                 <div class="auth-links">
