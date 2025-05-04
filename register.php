@@ -15,44 +15,65 @@ $eligibilityService = new EligibilityService($conn);
 
 // --- Strategy Pattern Classes ---
 interface ValidationStrategy {
+
     public function validate($value): ?string;
 }
+
 class RequiredValidation implements ValidationStrategy {
+
     public function validate($value): ?string {
         return empty(trim($value)) ? "This field is required." : null;
     }
 }
+
 class PasswordStrengthValidation implements ValidationStrategy {
+
     public function validate($value): ?string {
-        if (strlen($value) < 8) return "Password must be at least 8 characters.";
-        if (!preg_match('/[A-Z]/', $value)) return "Include an uppercase letter.";
-        if (!preg_match('/[a-z]/', $value)) return "Include a lowercase letter.";
-        if (!preg_match('/[0-9]/', $value)) return "Include a number.";
-        if (!preg_match('/[^a-zA-Z0-9]/', $value)) return "Include a symbol.";
+        if (strlen($value) < 8)
+            return "Password must be at least 8 characters.";
+        if (!preg_match('/[A-Z]/', $value))
+            return "Include an uppercase letter.";
+        if (!preg_match('/[a-z]/', $value))
+            return "Include a lowercase letter.";
+        if (!preg_match('/[0-9]/', $value))
+            return "Include a number.";
+        if (!preg_match('/[^a-zA-Z0-9]/', $value))
+            return "Include a symbol.";
         return null;
     }
 }
+
 class EmailValidation implements ValidationStrategy {
+
     public function validate($value): ?string {
-        if (!filter_var($value, FILTER_VALIDATE_EMAIL) ||!str_ends_with($value, '@.com')) return "Invalid email format. Email must end with @.com";
+        if (!filter_var($value, FILTER_VALIDATE_EMAIL) || !str_ends_with($value, '@.com'))
+            return "Invalid email format. Email must end with @.com";
         return null;
     }
 }
+
 class SecurityAnswerValidation implements ValidationStrategy {
+
     public function validate($value): ?string {
-        return preg_match('/[^a-zA-Z0-9 \\-_]/', $value) ? "No special characters allowed." : null;
+        // Reject any special characters (only allow a-z, A-Z, 0-9)
+        return preg_match('/[^a-zA-Z0-9]/', $value) ? "Special characters are not allowed." : null;
     }
 }
+
 class FieldValidator {
+
     private $strategies = [];
+
     public function addStrategy(ValidationStrategy $strategy) {
         $this->strategies[] = $strategy;
     }
+
     public function validate($value): array {
         $errors = [];
         foreach ($this->strategies as $strategy) {
             $error = $strategy->validate($value);
-            if ($error) $errors[] = $error;
+            if ($error)
+                $errors[] = $error;
         }
         return $errors;
     }
@@ -65,7 +86,7 @@ function has_special_char($str) {
 
 // Helper function for email validation
 function is_valid_email($email) {
-    return filter_var($email, FILTER_VALIDATE_EMAIL) && str_ends_with($email, '@.com');
+    return filter_var($email, FILTER_VALIDATE_EMAIL) && str_ends_with($email, '@student.tarc.edu.my');
 }
 
 // Helper: Only allow certain characters in email
@@ -73,9 +94,14 @@ function sanitize_email($email) {
     return preg_replace('/[^a-zA-Z0-9@.]/', '', $email);
 }
 
-// Helper: Only allow certain characters in addresses
+// Helper: Allow letters, numbers, spaces, commas, periods, and hyphens in addresses
 function sanitize_address($str) {
-    return preg_replace('/[^a-zA-Z0-9 ,.]/', '', $str);
+    return preg_replace('/[^a-zA-Z0-9 ,.-]/', '', $str); // Added `-` (hyphen)
+}
+
+// New helper function (or modify has_special_char)
+function has_special_char_billing($str) {
+    return preg_match('/[^a-zA-Z0-9 ,.-]/', $str); // Allow , . -
 }
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
@@ -92,48 +118,70 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $student_status = htmlspecialchars(trim($_POST['student_status']), ENT_QUOTES, 'UTF-8');
     $billing_address = sanitize_address(trim($_POST['billing_address']));
     $current_address = sanitize_address(trim($_POST['current_address']));
-    $recaptcha_response = $_POST['g-recaptcha-response']?? '';
+    $recaptcha_response = $_POST['g-recaptcha-response'] ?? '';
 
     // Length restrictions
-    if (strlen($full_name) > 100) $errors[] = "Full name too long.";
-    if (strlen($student_id) > 20) $errors[] = "Student ID too long.";
-    if (strlen($email) > 100) $errors[] = "Email too long.";
-    if (strlen($program) > 50) $errors[] = "Program too long.";
-    if (strlen($billing_address) > 255) $errors[] = "Billing address too long.";
-    if (strlen($current_address) > 255) $errors[] = "Current address too long.";
+    if (strlen($full_name) > 100)
+        $errors[] = "Full name too long.";
+    if (strlen($student_id) > 20)
+        $errors[] = "Student ID too long.";
+    if (strlen($student_id) <= 10)
+        $errors[] = "Student ID must be more than 10 characters.";
+    if (strlen($email) > 100)
+        $errors[] = "Email too long.";
+    if (strlen($program) > 50)
+        $errors[] = "Program too long.";
+    if (strlen($billing_address) > 255)
+        $errors[] = "Billing address too long.";
+    if (strlen($current_address) > 255)
+        $errors[] = "Current address too long.";
 
     // Special character validation
-    if (has_special_char($full_name)) $errors[] = "Please don't put special character in Full Name.";
-    if (has_special_char($student_id)) $errors[] = "Please don't put special character in Student ID.";
-    if (has_special_char($program)) $errors[] = "Please don't put special character in Program.";
-    if (has_special_char($student_status)) $errors[] = "Please don't put special character in Student Status.";
+    if (has_special_char($full_name))
+        $errors[] = "Please don't put special character in Full Name.";
+    if (has_special_char($student_id))
+        $errors[] = "Please don't put special character in Student ID.";
+    if (has_special_char($program))
+        $errors[] = "Please don't put special character in Program.";
+    if (has_special_char($student_status))
+        $errors[] = "Please don't put special character in Student Status.";
 
     // Email validation
-    if (!is_valid_email($email)) $errors[] = "Please enter a valid email address ending with @.com.";
+    if (!is_valid_email($email))
+        $errors[] = "Please enter a valid TARC student email address ending with @student.tarc.edu.my.";
 
     // Password validation (example: at least 8 chars, upper, lower, number, symbol)
     if (strlen($password) < 8 ||
-        !preg_match('/[A-Z]/', $password) ||
-        !preg_match('/[a-z]/', $password) ||
-        !preg_match('/[0-9]/', $password) ||
-        !preg_match('/[^a-zA-Z0-9]/', $password)) {
+            !preg_match('/[A-Z]/', $password) ||
+            !preg_match('/[a-z]/', $password) ||
+            !preg_match('/[0-9]/', $password) ||
+            !preg_match('/[^a-zA-Z0-9]/', $password)) {
         $errors[] = "Password must be at least 8 characters and include uppercase, lowercase, number, and symbol.";
     }
-    if ($password!== $confirm_password) $errors[] = "Passwords do not match.";
+    if ($password !== $confirm_password)
+        $errors[] = "Passwords do not match.";
 
     // Required fields
-    if (empty($full_name)) $errors[] = "Full name is required.";
-    if (empty($student_id)) $errors[] = "Student ID is required.";
-    if (empty($email)) $errors[] = "Email is required.";
-    if (empty($program)) $errors[] = "Program of study is required.";
-    if (empty($date_of_birth)) $errors[] = "Date of birth is required.";
-    if (empty($student_status)) $errors[] = "Student status is required.";
-    if (empty($billing_address)) $errors[] = "Billing address is required.";
-    if (empty($current_address)) $errors[] = "Current address is required.";
+    if (empty($full_name))
+        $errors[] = "Full name is required.";
+    if (empty($student_id))
+        $errors[] = "Student ID is required.";
+    if (empty($email))
+        $errors[] = "Email is required.";
+    if (empty($program))
+        $errors[] = "Program of study is required.";
+    if (empty($date_of_birth))
+        $errors[] = "Date of birth is required.";
+    if (empty($student_status))
+        $errors[] = "Student status is required.";
+    if (empty($billing_address))
+        $errors[] = "Billing address is required.";
+    if (empty($current_address))
+        $errors[] = "Current address is required.";
 
     // Student ID must contain both letters and numbers
     if (!preg_match('/[a-zA-Z]/', $student_id) || !preg_match('/[0-9]/', $student_id)) {
-        $errors[] = "Student ID must contain both letters and numbers.";
+        $errors[] = "Student ID must contain both letters and numbers, and need to have 10 character.";
     }
 
     // Verify reCAPTCHA v3
@@ -197,7 +245,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             }
 
             $success = true;
-
         } catch (PDOException $e) {
             $errors[] = "Registration failed. Please try again.";
         }
@@ -207,6 +254,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $securityAnswerValidator->addStrategy(new RequiredValidation());
     $securityAnswerValidator->addStrategy(new SecurityAnswerValidation());
     $securityAnswerErrors = $securityAnswerValidator->validate($_POST['security_answer']);
+
+    if (has_special_char_billing($billing_address)) {
+        $errors[] = "Billing address contains invalid characters. Allowed: letters, numbers, spaces, commas, periods, hyphens.";
+    }
 }
 
 // After successful registration, show a message and redirect
@@ -218,561 +269,577 @@ if ($success) {
 <!DOCTYPE html>
 <html lang="en">
 
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Student Registration - EduVote</title>
-    <script src="https://www.google.com/recaptcha/api.js?render=YOUR_SITE_KEY"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
-    <style>
-        /* Reuse the same styles from login.php for consistency */
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: 'Segoe UI', Roboto, sans-serif;
-        }
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Student Registration - EduVote</title>
+        <script src="https://www.google.com/recaptcha/api.js?render=YOUR_SITE_KEY"></script>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
+        <style>
+            /* Reuse the same styles from login.php for consistency */
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+                font-family: 'Segoe UI', Roboto, sans-serif;
+            }
 
-        body {
-            background-color: #f5f7fa;
-            color: #2c3e50;
-            line-height: 1.6;
-            display: flex;
-            flex-direction: column;
-            min-height: 100vh;
-        }
+            body {
+                background-color: #f5f7fa;
+                color: #2c3e50;
+                line-height: 1.6;
+                display: flex;
+                flex-direction: column;
+                min-height: 100vh;
+            }
 
-        header {
-            background-color: #1a5276;
-            color: white;
-            padding: 1rem;
-            text-align: center;
-        }
+            header {
+                background-color: #1a5276;
+                color: white;
+                padding: 1rem;
+                text-align: center;
+            }
 
-       .logo {
-            font-size: 1.5rem;
-            font-weight: bold;
-            margin-bottom: 0.5rem;
-        }
+            .logo {
+                font-size: 1.5rem;
+                font-weight: bold;
+                margin-bottom: 0.5rem;
+            }
 
-       .logo span {
-            color: #3498db;
-        }
+            .logo span {
+                color: #3498db;
+            }
 
-        nav {
-            margin-top: 1rem;
-        }
+            nav {
+                margin-top: 1rem;
+            }
 
-        nav a {
-            color: white;
-            text-decoration: none;
-            margin: 0 10px;
-            font-weight: 500;
-        }
+            nav a {
+                color: white;
+                text-decoration: none;
+                margin: 0 10px;
+                font-weight: 500;
+            }
 
-       .auth-container {
-            max-width: 800px;
-            margin: 2rem auto;
-            padding: 0 1rem;
-            flex: 1;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 2rem;
-            justify-content: center;
-        }
+            .auth-container {
+                max-width: 800px;
+                margin: 2rem auto;
+                padding: 0 1rem;
+                flex: 1;
+                display: flex;
+                flex-wrap: wrap;
+                gap: 2rem;
+                justify-content: center;
+            }
 
-       .auth-box {
-            background: white;
-            border-radius: 8px;
-            padding: 2rem;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            width: 100%;
-            max-width: 400px;
-        }
+            .auth-box {
+                background: white;
+                border-radius: 8px;
+                padding: 2rem;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                width: 100%;
+                max-width: 400px;
+            }
 
-       .auth-box h1 {
-            text-align: center;
-            color: #1a5276;
-            margin-bottom: 1.5rem;
-            font-size: 1.5rem;
-        }
+            .auth-box h1 {
+                text-align: center;
+                color: #1a5276;
+                margin-bottom: 1.5rem;
+                font-size: 1.5rem;
+            }
 
-       .form-group {
-            margin-bottom: 1.5rem;
-        }
+            .form-group {
+                margin-bottom: 1.5rem;
+            }
 
-       .form-group label {
-            display: block;
-            margin-bottom: 0.5rem;
-            font-weight: 500;
-        }
+            .form-group label {
+                display: block;
+                margin-bottom: 0.5rem;
+                font-weight: 500;
+            }
 
-       .form-group label.required::after {
-            content: '*';
-            color: red;
-            margin-left: 3px;
-        }
+            .form-group label.required::after {
+                content: '*';
+                color: red;
+                margin-left: 3px;
+            }
 
-       .form-group input,
-       .form-group select {
-            width: 100%;
-            padding: 0.8rem;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 1rem;
-        }
+            .form-group input,
+            .form-group select {
+                width: 100%;
+                padding: 0.8rem;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                font-size: 1rem;
+            }
 
-       .form-group textarea {
-            width: 100%;
-            padding: 0.8rem;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 1rem;
-            height: 100px; /* Increase the height of textareas */
-        }
+            .form-group textarea {
+                width: 100%;
+                padding: 0.8rem;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                font-size: 1rem;
+                height: 100px; /* Increase the height of textareas */
+            }
 
-       .btn {
-            display: block;
-            width: 100%;
-            padding: 0.8rem;
-            background: #2980b9;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            font-size: 1rem;
-            font-weight: 500;
-            cursor: pointer;
-            margin-top: 1rem;
-        }
+            .btn {
+                display: block;
+                width: 100%;
+                padding: 0.8rem;
+                background: #2980b9;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                font-size: 1rem;
+                font-weight: 500;
+                cursor: pointer;
+                margin-top: 1rem;
+            }
 
-       .btn:hover {
-            background: #2471a3;
-        }
+            .btn:hover {
+                background: #2471a3;
+            }
 
-       .auth-links {
-            margin-top: 1.5rem;
-            text-align: center;
-        }
+            .auth-links {
+                margin-top: 1.5rem;
+                text-align: center;
+            }
 
-       .auth-links a {
-            color: #2980b9;
-            text-decoration: none;
-            display: block;
-            margin-bottom: 0.5rem;
-        }
+            .auth-links a {
+                color: #2980b9;
+                text-decoration: none;
+                display: block;
+                margin-bottom: 0.5rem;
+            }
 
-        footer {
-            background: #1a5276;
-            color: white;
-            text-align: center;
-            padding: 1.5rem;
-            margin-top: auto;
-        }
+            footer {
+                background: #1a5276;
+                color: white;
+                text-align: center;
+                padding: 1.5rem;
+                margin-top: auto;
+            }
 
-       .error {
-            color: red;
-            text-align: center;
-            margin-bottom: 1rem;
-        }
+            .error {
+                color: red;
+                text-align: center;
+                margin-bottom: 1rem;
+            }
 
-       .social-login {
-            margin-top: 1rem;
-            text-align: center;
-        }
+            .social-login {
+                margin-top: 1rem;
+                text-align: center;
+            }
 
-       .social-login button {
-            margin: 0.5rem;
-            padding: 0.5rem 1rem;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: 500;
-        }
+            .social-login button {
+                margin: 0.5rem;
+                padding: 0.5rem 1rem;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+                font-weight: 500;
+            }
 
-       .google-btn {
-            background: #DB4437;
-            color: white;
-        }
+            .google-btn {
+                background: #DB4437;
+                color: white;
+            }
 
-       .facebook-btn {
-            background: #4267B2;
-            color: white;
-        }
+            .facebook-btn {
+                background: #4267B2;
+                color: white;
+            }
 
-       .eligibility-status {
-            margin: 1rem 0;
-            padding: 1rem;
-            border-radius: 4px;
-        }
+            .eligibility-status {
+                margin: 1rem 0;
+                padding: 1rem;
+                border-radius: 4px;
+            }
 
-       .eligible {
-            background: #d4edda;
-            color: #155724;
-        }
+            .eligible {
+                background: #d4edda;
+                color: #155724;
+            }
 
-       .not-eligible {
-            background: #f8d7da;
-            color: #721c24;
-        }
+            .not-eligible {
+                background: #f8d7da;
+                color: #721c24;
+            }
 
-       .strength-meter {
-            height: 5px;
-            width: 100%;
-            background: #eee;
-            margin-top: 2px;
-        }
+            .strength-meter {
+                height: 5px;
+                width: 100%;
+                background: #eee;
+                margin-top: 2px;
+            }
 
-       .strength-meter-bar {
-            height: 100%;
-            transition: width 0.3s;
-        }
+            .strength-meter-bar {
+                height: 100%;
+                transition: width 0.3s;
+            }
 
-       .strength-weak {
-            background: #e74c3c;
-        }
+            .strength-weak {
+                background: #e74c3c;
+            }
 
-       .strength-medium {
-            background: #f1c40f;
-        }
+            .strength-medium {
+                background: #f1c40f;
+            }
 
-       .strength-strong {
-            background: #2ecc71;
-        }
+            .strength-strong {
+                background: #2ecc71;
+            }
 
-       .show-hide {
-            cursor: pointer;
-        }
+            .show-hide {
+                cursor: pointer;
+            }
 
-       .invalid {
-            border: 1px solid red;
-        }
+            .invalid {
+                border: 1px solid red;
+            }
 
-       .valid {
-            border: 1px solid green;
-        }
+            .valid {
+                border: 1px solid green;
+            }
 
-        form {
-            width: 300px;
-            margin: 0 auto;
-        }
+            form {
+                width: 300px;
+                margin: 0 auto;
+            }
 
-        input {
-            width: 100%;
-            padding: 10px;
-            border: 2px solid #ccc;
-            border-radius: 5px;
-            margin-bottom: 10px;
-            font-size: 16px;
-        }
+            input {
+                width: 100%;
+                padding: 10px;
+                border: 2px solid #ccc;
+                border-radius: 5px;
+                margin-bottom: 10px;
+                font-size: 16px;
+            }
 
-       .error input {
-            border-color: red;
-        }
+            .error input {
+                border-color: red;
+            }
 
-       .success input {
-            border-color: green;
-        }
+            .success input {
+                border-color: green;
+            }
 
-        i {
-            position: absolute;
-            right: 10px;
-            top: 50%;
-            transform: translateY(-50%);
-            font-size: 20px;
-        }
+            i {
+                position: absolute;
+                right: 10px;
+                top: 50%;
+                transform: translateY(-50%);
+                font-size: 20px;
+            }
 
-       .error i {
-            color: red;
-        }
+            .error i {
+                color: red;
+            }
 
-       .success i {
-            color: green;
-        }
+            .success i {
+                color: green;
+            }
 
-        p {
-            background-color: red;
-            color: white;
-            padding: 5px 10px;
-            border-radius: 5px;
-            margin: 0;
-            display: none;
-        }
+            p {
+                background-color: red;
+                color: white;
+                padding: 5px 10px;
+                border-radius: 5px;
+                margin: 0;
+                display: none;
+            }
 
-       .error p {
-            display: block;
-        }
+            .error p {
+                display: block;
+            }
 
-        /* Default input style */
-       .form-input {
-            padding: 10px;
-            border: 2px solid #ccc;
-            border-radius: 4px;
-            width: 200px;
-        }
+            /* Default input style */
+            .form-input {
+                padding: 10px;
+                border: 2px solid #ccc;
+                border-radius: 4px;
+                width: 200px;
+            }
 
-        /* Valid input (green background) */
-       .valid {
-            background-color: #d4edda;
-            border-color: #28a745;
-        }
+            /* Valid input (green background) */
+            .valid {
+                background-color: #d4edda;
+                border-color: #28a745;
+            }
 
-        /* Invalid input (red background) */
-       .invalid {
-            background-color: #f8d7da;
-            border-color: #dc3545;
-        }
-    </style>
-</head>
+            /* Invalid input (red background) */
+            .invalid {
+                background-color: #f8d7da;
+                border-color: #dc3545;
+            }
+        </style>
+    </head>
 
-<body>
-    <header>
-        <div class="logo">Edu<span>Vote</span></div>
-        <nav>
-            <a href="homePage.php">Home</a>
-            <a href="login.php">Login</a>
-        </nav>
-    </header>
+    <body>
+        <header>
+            <div class="logo">Edu<span>Vote</span></div>
+            <nav>
+                <a href="homePage.php">Home</a>
+                <a href="login.php">Login</a>
+            </nav>
+        </header>
 
-    <div class="auth-container">
-        <div class="auth-box">
-            <h1>Student Registration</h1>
+        <div class="auth-container">
+            <div class="auth-box">
+                <h1>Student Registration</h1>
 
-            <?php if (!empty($errors)): ?>
-                <div class="error">
-                    <?php foreach ($errors as $error): ?>
-                        <p><?= htmlspecialchars($error) ?></p>
-                    <?php endforeach; ?>
+                <?php if (!empty($errors)): ?>
+                    <div class="error">
+                        <?php foreach ($errors as $error): ?>
+                            <p><?= htmlspecialchars($error) ?></p>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
+
+                <form action="register.php" method="post" id="registrationForm">
+                    <div class="form-group">
+                        <label for="full-name" class="required">Full Name</label>
+                        <input type="text" id="full-name" name="full_name" required oninput="validateInput(this, 'full_name'); this.value = this.value.replace(/[^a-zA-Z ]/g, '').toUpperCase()">
+                        <span class="feedback" id="full_name_feedback"></span>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="student-id" class="required">Student ID</label>
+                        <!-- Allow a-z and A-Z, then convert to uppercase -->
+                        <input type="text" id="student-id" name="student_id" required 
+                               oninput="validateInput(this, 'student_id'); this.value = this.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();">
+                        <span class="feedback" id="student_id_feedback"></span>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="email" class="required">Email</label>
+                        <input type="email" id="email" name="email" required oninput="validateInput(this, 'email')">
+                        <span class="feedback" id="email_feedback"></span>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="program" class="required">Program of Study</label>
+                        <select id="program" name="program" required onchange="validateInput(this, 'program')">
+                            <option value="">Select your program</option>
+                            <option value="Computer Science" <?php if (isset($_POST['program']) && $_POST['program'] === 'Computer Science') echo 'selected'; ?>>Computer Science</option>
+                            <option value="Engineering" <?php if (isset($_POST['program']) && $_POST['program'] === 'Engineering') echo 'selected'; ?>>Engineering</option>
+                            <option value="Business" <?php if (isset($_POST['program']) && $_POST['program'] === 'Business') echo 'selected'; ?>>Business</option>
+                            <option value="Arts & Humanities" <?php if (isset($_POST['program']) && $_POST['program'] === 'Arts & Humanities') echo 'selected'; ?>>Arts & Humanities</option>
+                            <option value="Natural Sciences" <?php if (isset($_POST['program']) && $_POST['program'] === 'Natural Sciences') echo 'selected'; ?>>Natural Sciences</option>
+                            <option value="Other" <?php if (isset($_POST['program']) && $_POST['program'] === 'Other') echo 'selected'; ?>>Other</option>
+                        </select>
+                        <span class="feedback" id="program_feedback"></span>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="password" class="required">Password</label>
+                        <input type="password" id="password" name="password" required oninput="validatePassword()">
+                        <span class="show-hide" onclick="togglePassword()">👁️</span>
+                        <span class="feedback" id="password_feedback"></span>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="confirm-password" class="required">Confirm Password</label>
+                        <input type="password" id="confirm-password" name="confirm_password" required oninput="validateConfirmPassword()">
+                        <span class="feedback" id="confirm_password_feedback"></span>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="date-of-birth" class="required">Date of Birth</label>
+                        <input type="date" id="date-of-birth" name="date_of_birth" required oninput="validateInput(this, 'date_of_birth')">
+                        <span class="feedback" id="date_of_birth_feedback"></span>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="student-status" class="required">Student Status</label>
+                        <select id="student-status" name="student_status" required onchange="validateInput(this, 'student_status')">
+                            <option value="">Select Status</option>
+                            <option value="Current Student">Current Student</option>
+                            <option value="Alumni">Alumni</option>
+                        </select>
+                        <span class="feedback" id="student_status_feedback"></span>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="security-question" class="required">Security Question</label>
+                        <select id="security-question" name="security_question" required onchange="validateInput(this, 'security_question')">
+                            <option value="">Select a question</option>
+                            <option value="What is your mother's maiden name?">What is your mother's maiden name?</option>
+                            <option value="What was your first pet's name?">What was your first pet's name?</option>
+                            <option value="What is your favorite book?">What is your favorite book?</option>
+                            <option value="What city were you born in?">What city were you born in?</option>
+                        </select>
+                        <span class="feedback" id="security_question_feedback"></span>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="security-answer" class="required">Security Answer</label>
+                        <input type="text" id="security-answer" name="security_answer" maxlength="255" required oninput="validateInput(this, 'security_answer')">
+                        <span class="feedback" id="security_answer_feedback"></span>
+                    </div>
+
+                    <!-- Billing Address -->
+                    <div class="form-group">
+                        <label for="billing-address" class="required">Billing Address</label>
+                        <textarea id="billing-address" name="billing_address" maxlength="255" required 
+                                  oninput="validateInput(this, 'billing_address')"></textarea>
+                        <span class="feedback" id="billing_address_feedback"></span>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="current-address" class="required">Current Address</label>
+                        <textarea id="current-address" name="current_address" maxlength="255" required oninput="validateInput(this, 'current_address')"></textarea>
+                        <span class="feedback" id="current_address_feedback"></span>
+                    </div>
+
+                    <button type="submit" class="btn">Register</button>
+                </form>
+
+                <div class="auth-links">
+                    <a href="login.php">Already have an account? Login</a>
                 </div>
-            <?php endif; ?>
-
-            <form action="register.php" method="post" id="registrationForm">
-                <div class="form-group">
-                    <label for="full-name" class="required">Full Name</label>
-                    <input type="text" id="full-name" name="full_name" required oninput="validateInput(this, 'full_name'); this.value = this.value.replace(/[^a-zA-Z ]/g, '').toUpperCase()">
-                    <span class="feedback" id="full_name_feedback"></span>
-                </div>
-
-                <div class="form-group">
-                    <label for="student-id" class="required">Student ID</label>
-                    <input type="text" id="student-id" name="student_id" required oninput="validateInput(this,'student_id')">
-                    <span class="feedback" id="student_id_feedback"></span>
-                </div>
-
-                <div class="form-group">
-                    <label for="email" class="required">Email</label>
-                    <input type="email" id="email" name="email" required oninput="validateInput(this, 'email')">
-                    <span class="feedback" id="email_feedback"></span>
-                </div>
-
-                <div class="form-group">
-                    <label for="program" class="required">Program of Study</label>
-                    <select id="program" name="program" required onchange="validateInput(this, 'program')">
-                        <option value="">Select your program</option>
-                        <option value="Computer Science" <?php if (isset($_POST['program']) && $_POST['program'] === 'Computer Science') echo 'selected';?>>Computer Science</option>
-                        <option value="Engineering" <?php if (isset($_POST['program']) && $_POST['program'] === 'Engineering') echo 'selected';?>>Engineering</option>
-                        <option value="Business" <?php if (isset($_POST['program']) && $_POST['program'] === 'Business') echo 'selected';?>>Business</option>
-                        <option value="Arts & Humanities" <?php if (isset($_POST['program']) && $_POST['program'] === 'Arts & Humanities') echo 'selected';?>>Arts & Humanities</option>
-                        <option value="Natural Sciences" <?php if (isset($_POST['program']) && $_POST['program'] === 'Natural Sciences') echo 'selected';?>>Natural Sciences</option>
-                        <option value="Other" <?php if (isset($_POST['program']) && $_POST['program'] === 'Other') echo 'selected';?>>Other</option>
-                    </select>
-                    <span class="feedback" id="program_feedback"></span>
-                </div>
-
-                <div class="form-group">
-                    <label for="password" class="required">Password</label>
-                    <input type="password" id="password" name="password" required oninput="validatePassword()">
-                    <span class="show-hide" onclick="togglePassword()">👁️</span>
-                    <span class="feedback" id="password_feedback"></span>
-                </div>
-
-                <div class="form-group">
-                    <label for="confirm-password" class="required">Confirm Password</label>
-                    <input type="password" id="confirm-password" name="confirm_password" required oninput="validateConfirmPassword()">
-                    <span class="feedback" id="confirm_password_feedback"></span>
-                </div>
-
-                <div class="form-group">
-                    <label for="date-of-birth" class="required">Date of Birth</label>
-                    <input type="date" id="date-of-birth" name="date_of_birth" required oninput="validateInput(this, 'date_of_birth')">
-                    <span class="feedback" id="date_of_birth_feedback"></span>
-                </div>
-
-                <div class="form-group">
-                    <label for="student-status" class="required">Student Status</label>
-                    <select id="student-status" name="student_status" required onchange="validateInput(this,'student_status')">
-                        <option value="">Select Status</option>
-                        <option value="Current Student">Current Student</option>
-                        <option value="Alumni">Alumni</option>
-                    </select>
-                    <span class="feedback" id="student_status_feedback"></span>
-                </div>
-
-                <div class="form-group">
-                    <label for="security-question" class="required">Security Question</label>
-                    <select id="security-question" name="security_question" required onchange="validateInput(this, 'security_question')">
-                        <option value="">Select a question</option>
-                        <option value="What is your mother's maiden name?">What is your mother's maiden name?</option>
-                        <option value="What was your first pet's name?">What was your first pet's name?</option>
-                        <option value="What is your favorite book?">What is your favorite book?</option>
-                        <option value="What city were you born in?">What city were you born in?</option>
-                    </select>
-                    <span class="feedback" id="security_question_feedback"></span>
-                </div>
-
-                <div class="form-group">
-                    <label for="security-answer" class="required">Security Answer</label>
-                    <input type="text" id="security-answer" name="security_answer" maxlength="255" required oninput="validateInput(this, 'security_answer')">
-                    <span class="feedback" id="security_answer_feedback"></span>
-                </div>
-
-                <div class="form-group">
-                    <label for="billing-address" class="required">Billing Address</label>
-                    <textarea id="billing-address" name="billing_address" maxlength="255" required oninput="validateInput(this, 'billing_address')"></textarea>
-                    <span class="feedback" id="billing_address_feedback"></span>
-                </div>
-
-                <div class="form-group">
-                    <label for="current-address" class="required">Current Address</label>
-                    <textarea id="current-address" name="current_address" maxlength="255" required oninput="validateInput(this, 'current_address')"></textarea>
-                    <span class="feedback" id="current_address_feedback"></span>
-                </div>
-
-                <button type="submit" class="btn">Register</button>
-            </form>
-
-            <div class="auth-links">
-                <a href="login.php">Already have an account? Login</a>
             </div>
         </div>
-    </div>
 
-    <div class="form-group">
-        <div class="<?= $errors? 'error' : ($success? 'success' : '')?>">
-            <input type="text" name="input_field" placeholder="Input field" class="form-input" oninput="validateInput(this)">
-            <i class="fa <?= $errors? 'fa-exclamation-circle' : ($success? 'fa-check-circle' : '')?>"></i>
-            <p><?= $errors[0]?? ''?></p>
+        <div class="form-group">
+            <div class="<?= $errors ? 'error' : ($success ? 'success' : '') ?>">
+                <input type="text" name="input_field" placeholder="Input field" class="form-input" oninput="validateInput(this)">
+                <i class="fa <?= $errors ? 'fa-exclamation-circle' : ($success ? 'fa-check-circle' : '') ?>"></i>
+                <p><?= $errors[0] ?? '' ?></p>
+            </div>
         </div>
-    </div>
 
-    <footer>
-        <p>&copy; <?= date('Y') ?> EduVote. All rights reserved.</p>
-    </footer>
+        <footer>
+            <p>&copy; <?= date('Y') ?> EduVote. All rights reserved.</p>
+        </footer>
 
-    <script>
-        document.getElementById('registrationForm').addEventListener('submit', function (e) {
-            e.preventDefault();
-            grecaptcha.ready(function () {
-                grecaptcha.execute('6LfLcC0rAAAAAG3ZmASAUwWVyYf4dY4GBNmZRZFj', {action:'register'}).then(function (token) {
-                    var form = document.getElementById('registrationForm');
-                    var input = document.createElement('input');
-                    input.type = 'hidden';
-                    input.name = 'g-recaptcha-response';
-                    input.value = token;
-                    form.appendChild(input);
-                    form.submit();
+        <script>
+            document.getElementById('registrationForm').addEventListener('submit', function (e) {
+                e.preventDefault();
+                grecaptcha.ready(function () {
+                    grecaptcha.execute('6LfLcC0rAAAAAG3ZmASAUwWVyYf4dY4GBNmZRZFj', {action: 'register'}).then(function (token) {
+                        var form = document.getElementById('registrationForm');
+                        var input = document.createElement('input');
+                        input.type = 'hidden';
+                        input.name = 'g-recaptcha-response';
+                        input.value = token;
+                        form.appendChild(input);
+                        form.submit();
+                    });
                 });
             });
-        });
 
-        // Password show/hide
-        function togglePassword() {
-            var pwd = document.getElementById('password');
-            pwd.type = pwd.type === 'password'? 'text' : 'password';
-        }
+            // Password show/hide
+            function togglePassword() {
+                var pwd = document.getElementById('password');
+                pwd.type = pwd.type === 'password' ? 'text' : 'password';
+            }
 
-        // General input validation function
-        function validateInput(input, fieldName) {
-            const feedback = document.getElementById(`${fieldName}_feedback`);
-            const value = input.value;
-            let errorMessage = '';
+            // General input validation function
+            function validateInput(input, fieldName) {
+                const feedback = document.getElementById(`${fieldName}_feedback`);
+                const value = input.value;
+                let errorMessage = '';
 
-            if (input.tagName === 'SELECT' && value === '') {
-                errorMessage = 'This field is required.';
-            } else if (input.type === 'text' || input.type === 'textarea') {
-                if (value === '') {
+                if (input.tagName === 'SELECT' && value === '') {
                     errorMessage = 'This field is required.';
-                } else if (fieldName === 'full_name') {
-                    const specialCharRegex = /[^a-zA-Z ]/;
-                    if (specialCharRegex.test(value)) {
-                        errorMessage = `Please don't put special character in ${fieldName.replace('_','')}`;
+                } else if (input.type === 'text' || input.type === 'textarea') {
+                    if (value === '') {
+                        errorMessage = 'This field is required.';
+                    } else if (fieldName === 'student_id') {
+                        // Check length: Must be more than 10 characters (>= 11)
+                        if (value.length <= 10) {
+                            errorMessage = 'Student ID must be more than 10 characters.';
+                        } else {
+                            // Check for special characters (only allow A-Z and 0-9)
+                            const specialCharRegex = /[^A-Z0-9]/; // Input is uppercase (from toUpperCase())
+                            if (specialCharRegex.test(value)) {
+                                errorMessage = 'Student ID cannot contain special characters (only letters and numbers allowed).';
+                            } else if (!/[A-Z]/.test(value) || !/[0-9]/.test(value)) {
+                                errorMessage = 'Student ID must contain both letters and numbers.';
+                            }
+                        }
+                    } else if (fieldName === 'security_answer') {
+                        const specialCharRegex = /[^a-zA-Z0-9]/;
+                        if (specialCharRegex.test(value)) {
+                            errorMessage = "Security answer cannot contain special characters (only letters and numbers allowed).";
+                        }
+                    } else if (fieldName === 'billing_address') {
+                        const allowedCharsRegex = /^[a-zA-Z0-9 ,.-]+$/; // Allow , . -
+                        if (!allowedCharsRegex.test(value)) {
+                            errorMessage = "Billing address may only contain letters, numbers, spaces, commas, periods, and hyphens.";
+                        }
                     }
-                } else if (fieldName ==='student_id') {
-                    const letterRegex = /[a-zA-Z]/;
-                    const numberRegex = /[0-9]/;
-                    if (!letterRegex.test(value) || !numberRegex.test(value)) {
-                        errorMessage = 'Student ID must contain both letters and numbers.';
-                    }
-                } else if (fieldName === 'email') {
-                    const emailRegex = /^[^\s@]+@[^\s@]+\.com$/;
-                    if (!emailRegex.test(value)) {
-                        errorMessage = 'Please enter a valid email address ending with @.com.';
-                    }
+                }
+
+                if (errorMessage) {
+                    feedback.textContent = `⚠️ ${errorMessage}`;
+                    input.classList.add('invalid');
+                    input.classList.remove('valid');
+                } else {
+                    feedback.textContent = '';
+                    input.classList.add('valid');
+                    input.classList.remove('invalid');
                 }
             }
 
-            if (errorMessage) {
-                feedback.textContent = `⚠️ ${errorMessage}`;
-                input.classList.add('invalid');
-                input.classList.remove('valid');
-            } else {
-                feedback.textContent = '';
-                input.classList.add('valid');
-                input.classList.remove('invalid');
-            }
-        }
+// Password validation
+            function validatePassword() {
+                const password = document.getElementById('password');
+                const passwordFeedback = document.getElementById('password_feedback');
+                const val = password.value;
+                let strength = 0;
+                if (val.length >= 8)
+                    strength++;
+                if (/[A-Z]/.test(val))
+                    strength++;
+                if (/[a-z]/.test(val))
+                    strength++;
+                if (/[0-9]/.test(val))
+                    strength++;
+                if (/[^a-zA-Z0-9]/.test(val))
+                    strength++;
 
-        // Password validation
-        function validatePassword() {
-            const password = document.getElementById('password');
-            const passwordFeedback = document.getElementById('password_feedback');
-            const val = password.value;
-            let strength = 0;
-            if (val.length >= 8) strength++;
-            if (/[A-Z]/.test(val)) strength++;
-            if (/[a-z]/.test(val)) strength++;
-            if (/[0-9]/.test(val)) strength++;
-            if (/[^a-zA-Z0-9]/.test(val)) strength++;
+                let errorMessage = '';
+                if (val.length < 8) {
+                    errorMessage = 'Password must be at least 8 characters.';
+                } else if (!/[A-Z]/.test(val)) {
+                    errorMessage = 'Include an uppercase letter.';
+                } else if (!/[a-z]/.test(val)) {
+                    errorMessage = 'Include a lowercase letter.';
+                } else if (!/[0-9]/.test(val)) {
+                    errorMessage = 'Include a number.';
+                } else if (!/[^a-zA-Z0-9]/.test(val)) {
+                    errorMessage = 'Include a symbol.';
+                }
 
-            let errorMessage = '';
-            if (val.length < 8) {
-                errorMessage = 'Password must be at least 8 characters.';
-            } else if (!/[A-Z]/.test(val)) {
-                errorMessage = 'Include an uppercase letter.';
-            } else if (!/[a-z]/.test(val)) {
-                errorMessage = 'Include a lowercase letter.';
-            } else if (!/[0-9]/.test(val)) {
-                errorMessage = 'Include a number.';
-            } else if (!/[^a-zA-Z0-9]/.test(val)) {
-                errorMessage = 'Include a symbol.';
+                if (errorMessage) {
+                    passwordFeedback.textContent = `⚠️ ${errorMessage}`;
+                    password.classList.add('invalid');
+                    password.classList.remove('valid');
+                } else {
+                    passwordFeedback.textContent = '';
+                    password.classList.add('valid');
+                    password.classList.remove('invalid');
+                }
             }
 
-            if (errorMessage) {
-                passwordFeedback.textContent = `⚠️ ${errorMessage}`;
-                password.classList.add('invalid');
-                password.classList.remove('valid');
-            } else {
-                passwordFeedback.textContent = '';
-                password.classList.add('valid');
-                password.classList.remove('invalid');
+// Confirm password validation
+            function validateConfirmPassword() {
+                const password = document.getElementById('password');
+                const confirmPassword = document.getElementById('confirm-password');
+                const confirmPasswordFeedback = document.getElementById('confirm_password_feedback');
+                if (confirmPassword.value !== password.value) {
+                    confirmPasswordFeedback.textContent = '⚠️ Passwords do not match.';
+                    confirmPassword.classList.add('invalid');
+                    confirmPassword.classList.remove('valid');
+                } else {
+                    confirmPasswordFeedback.textContent = '';
+                    confirmPassword.classList.add('valid');
+                    confirmPassword.classList.remove('invalid');
+                }
             }
-        }
-
-        // Confirm password validation
-        function validateConfirmPassword() {
-            const password = document.getElementById('password');
-            const confirmPassword = document.getElementById('confirm-password');
-            const confirmPasswordFeedback = document.getElementById('confirm_password_feedback');
-            if (confirmPassword.value!== password.value) {
-                confirmPasswordFeedback.textContent = '⚠️ Passwords do not match.';
-                confirmPassword.classList.add('invalid');
-                confirmPassword.classList.remove('valid');
-            } else {
-                confirmPasswordFeedback.textContent = '';
-                confirmPassword.classList.add('valid');
-                confirmPassword.classList.remove('invalid');
-            }
-        }
-    </script>
-</body>
+        </script>
+    </body>
 
 </html>    
