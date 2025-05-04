@@ -1,7 +1,7 @@
 <?php
 session_start();
 require_once __DIR__ . '/dbConnection.php';
-require_once __DIR__ . '/emailService.php';
+//require_once __DIR__ . '/emailService.php';
 require_once __DIR__ . '/oauth.php';
 require_once __DIR__ . '/eligibilityCheck.php';
 
