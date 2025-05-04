@@ -62,6 +62,35 @@ class SecurityAnswerValidation implements ValidationStrategy {
     }
 }
 
+class PasswordStrengthStrategy implements ValidationStrategy {
+    public function validate($value): ?string {
+        // This method can return null, but let's add a getStrength method for the meter
+        return null;
+    }
+    public function getStrength($value): int {
+        $strength = 0;
+        if (strlen($value) >= 8) $strength++;
+        if (preg_match('/[A-Z]/', $value)) $strength++;
+        if (preg_match('/[a-z]/', $value)) $strength++;
+        if (preg_match('/[0-9]/', $value)) $strength++;
+        if (preg_match('/[^a-zA-Z0-9]/', $value)) $strength++;
+        return $strength; // 0-5
+    }
+}
+
+class SecurityValidationStrategy implements ValidationStrategy {
+    public function validate($value): ?string {
+        // Simple checks for common XSS/SQLi patterns
+        if (preg_match('/<script|onerror|onload|<img|<svg|<iframe|<object|<embed|<a /i', $value)) {
+            return "Input contains potential XSS attack patterns.";
+        }
+        if (preg_match('/(select|insert|update|delete|drop|union|--|#|;)/i', $value)) {
+            return "Input contains potential SQL injection patterns.";
+        }
+        return null;
+    }
+}
+
 class FieldValidator {
 
     private $strategies = [];
@@ -283,10 +312,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         }
     }
 
-    $securityAnswerValidator = new FieldValidator();
-    $securityAnswerValidator->addStrategy(new RequiredValidation());
-    $securityAnswerValidator->addStrategy(new SecurityAnswerValidation());
-    $securityAnswerErrors = $securityAnswerValidator->validate($_POST['security_answer']);
+    $fieldValidator = new FieldValidator();
+    $fieldValidator->addStrategy(new RequiredValidation());
+    $fieldValidator->addStrategy(new SecurityValidationStrategy());
+    $fieldValidator->addStrategy(new SecurityAnswerValidation());
+    $securityAnswerErrors = $fieldValidator->validate($_POST['security_answer']);
 
     if (has_special_char_billing($billing_address)) {
         $errors[] = "Billing address contains invalid characters. Allowed: letters, numbers, spaces, commas, periods, hyphens.";
@@ -667,8 +697,10 @@ if ($success) {
                     <div class="form-group">
                         <label for="password" class="required">Password</label>
                         <input type="password" id="password" name="password" required oninput="validatePassword()">
-                        <span class="show-hide" onclick="togglePassword()">👁️</span>
                         <span class="feedback" id="password_feedback"></span>
+                        <div class="strength-meter" id="strengthMeter">
+                            <div class="strength-meter-bar" id="strengthMeterBar"></div>
+                        </div>
                     </div>
 
                     <div class="form-group">
@@ -873,6 +905,21 @@ if ($success) {
                     confirmPassword.classList.remove('invalid');
                 }
             }
+
+            function updateStrengthMeter() {
+                const password = document.getElementById('password').value;
+                let strength = 0;
+                if (password.length >= 8) strength++;
+                if (/[A-Z]/.test(password)) strength++;
+                if (/[a-z]/.test(password)) strength++;
+                if (/[0-9]/.test(password)) strength++;
+                if (/[^a-zA-Z0-9]/.test(password)) strength++;
+                const meter = document.getElementById('strengthMeterBar');
+                meter.style.width = (strength * 20) + '%';
+                meter.className = 'strength-meter-bar ' +
+                    (strength <= 2 ? 'strength-weak' : strength <= 4 ? 'strength-medium' : 'strength-strong');
+            }
+            document.getElementById('password').addEventListener('input', updateStrengthMeter);
         </script>
     </body>
 
