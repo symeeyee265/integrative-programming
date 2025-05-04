@@ -9,7 +9,7 @@ $errors = [];
 $success = false;
 
 // Initialize services
-$emailService = new EmailService($conn);
+//$emailService = new EmailService($conn);
 $oauthService = new OAuthService($conn);
 $eligibilityService = new EligibilityService($conn);
 
@@ -53,7 +53,6 @@ class EmailValidation implements ValidationStrategy {
     }
 }
 
-
 class SecurityAnswerValidation implements ValidationStrategy {
 
     public function validate($value): ?string {
@@ -92,7 +91,8 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     // Ensure $email is set from POST data
     $email = isset($_POST['email']) ? $_POST['email'] : '';
 }
-    // Helper function for email validation
+
+// Helper function for email validation
 function is_valid_email($email) {
     return filter_var($email, FILTER_VALIDATE_EMAIL) && preg_match('/@student\.tarc\.edu\.my$/', $email);
 }
@@ -101,8 +101,6 @@ function is_valid_email($email) {
 function sanitize_email($email) {
     return preg_replace('/[^a-zA-Z0-9@.]/', '', $email);
 }
-
-
 
 // Helper: Allow letters, numbers, spaces, commas, periods, and hyphens in addresses
 function sanitize_address($str) {
@@ -117,7 +115,7 @@ function has_special_char_billing($str) {
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     // Ensure $email is set from POST data
     $email = isset($_POST['email']) ? $_POST['email'] : '';
-
+    
     // Helper function for email validation
     function is_valid_email($email) {
         return filter_var($email, FILTER_VALIDATE_EMAIL) && preg_match('/@student\.tarc\.edu\.my$/', $email);
@@ -217,92 +215,111 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $errors[] = "Student ID must contain both letters and numbers, and need to have exactly 10 character.";
     }
 
-    // Verify reCAPTCHA v3
-    if (!empty($recaptcha_response)) {
-        $recaptcha_secret = '6LfLcC0rAAAAALHgWE2Vo4ogBMtPTomQ7w2mmi92';
-        $recaptcha_verify = file_get_contents("https://www.google.com/recaptcha/api/siteverify?secret={$recaptcha_secret}&response={$recaptcha_response}");
-        $recaptcha_data = json_decode($recaptcha_verify);
-        // Set a score threshold (0.5 in this example)
-        if (!$recaptcha_data->success || $recaptcha_data->score < 0.5) {
-            $errors[] = "reCAPTCHA verification failed.";
-        }
-    } else {
-        $errors[] = "Please complete the reCAPTCHA verification.";
-    }
+    // suceess
+    if ($success) {
+        echo "<!DOCTYPE html>
+        <html lang='en'>
+        <head>
+            <meta charset='UTF-8'>
+            <meta http-equiv='refresh' content='3;url=login.php'>
+            <title>Registration Success</title>
+            <style>.success-box{text-align:center;}</style>
+        </head>
+        <body>
+            <div class='success-box'>
+                <h1>Yayy! You've registered successfully.</h1>
+                <p>Redirecting to login page in 3 seconds...</p>
+            </div>
+        </body>
+        </html>";
 
-    // Check eligibility
-    if (empty($errors)) {
-        $eligibility = $eligibilityService->mockGovernmentAPI($date_of_birth, $student_status, $student_status);
-        if (!$eligibility['isEligible']) {
-            $errors = array_merge($errors, $eligibility['errors']);
-        }
-    }
-
-    // Check if student ID or email already exists
-    if (empty($errors)) {
-        try {
-            $stmt = $conn->prepare("SELECT user_id FROM users WHERE student_id =? OR email =?");
-            $stmt->execute([$student_id, $email]);
-
-            if ($stmt->rowCount() > 0) {
-                $errors[] = "Student ID or email already registered.";
+        // Verify reCAPTCHA v3
+        if (!empty($recaptcha_response)) {
+            $recaptcha_secret = '6LfLcC0rAAAAALHgWE2Vo4ogBMtPTomQ7w2mmi92';
+            $recaptcha_verify = file_get_contents("https://www.google.com/recaptcha/api/siteverify?secret={$recaptcha_secret}&response={$recaptcha_response}");
+            $recaptcha_data = json_decode($recaptcha_verify);
+            // Set a score threshold (0.5 in this example)
+            if (!$recaptcha_data->success || $recaptcha_data->score < 0.5) {
+                $errors[] = "reCAPTCHA verification failed.";
             }
-        } catch (PDOException $e) {
-            $errors[] = "Database error. Please try again later.";
+        } else {
+            $errors[] = "Please complete the reCAPTCHA verification.";
         }
-    }
 
-    // If no errors, insert new user
-    if (empty($errors)) {
-        try {
-            $hashed_password = password_hash($password, PASSWORD_DEFAULT);
-            $is_admin = 0; // New users are not admins by default
+        // Check eligibility
+        if (empty($errors)) {
+            $eligibility = $eligibilityService->mockGovernmentAPI($date_of_birth, $student_status, $student_status);
+            if (!$eligibility['isEligible']) {
+                $errors = array_merge($errors, $eligibility['errors']);
+            }
+        }
 
-            $stmt = $conn->prepare("
+        // Check if student ID or email already exists
+        if (empty($errors)) {
+            try {
+                $stmt = $conn->prepare("SELECT user_id FROM users WHERE student_id =? OR email =?");
+                $stmt->execute([$student_id, $email]);
+
+                if ($stmt->rowCount() > 0) {
+                    $errors[] = "Student ID or email already registered.";
+                }
+            } catch (PDOException $e) {
+                $errors[] = "Database error. Please try again later.";
+            }
+        }
+
+        // If no errors, insert new user
+        if (empty($errors)) {
+            try {
+                $hashed_password = password_hash($password, PASSWORD_DEFAULT);
+                $is_admin = 0; // New users are not admins by default
+
+                $stmt = $conn->prepare("
                 INSERT INTO users (
                     student_id, password, full_name, email, program, is_admin,
                     date_of_birth, student_status, billing_address, current_address
                 ) VALUES (?,?,?,?,?,?,?,?,?,?)
             ");
-            $stmt->execute([
-                $student_id, $hashed_password, $full_name, $email, $program, $is_admin,
-                $date_of_birth, $student_status, $billing_address, $current_address
-            ]);
+                $stmt->execute([
+                    $student_id, $hashed_password, $full_name, $email, $program, $is_admin,
+                    $date_of_birth, $student_status, $billing_address, $current_address
+                ]);
 
-            $userId = $conn->lastInsertId();
+                $userId = $conn->lastInsertId();
 
-            // Generate and send verification email
-            $token = $emailService->generateVerificationToken($userId);
-            if ($token) {
-                $emailService->sendVerificationEmail($email, $full_name, $token);
+                // Generate and send verification email
+                $token = $emailService->generateVerificationToken($userId);
+                if ($token) {
+                    $emailService->sendVerificationEmail($email, $full_name, $token);
+                }
+
+                $success = true;
+            } catch (PDOException $e) {
+                $errors[] = "Registration failed. Please try again.";
             }
+        }
 
-            $success = true;
-        } catch (PDOException $e) {
-            $errors[] = "Registration failed. Please try again.";
+        $securityAnswerValidator = new FieldValidator();
+        $securityAnswerValidator->addStrategy(new RequiredValidation());
+        $securityAnswerValidator->addStrategy(new SecurityAnswerValidation());
+        $securityAnswerErrors = $securityAnswerValidator->validate($_POST['security_answer']);
+
+        if (has_special_char_billing($billing_address)) {
+            $errors[] = "Billing address contains invalid characters. Allowed: letters, numbers, spaces, commas, periods, hyphens.";
         }
     }
 
-    $securityAnswerValidator = new FieldValidator();
-    $securityAnswerValidator->addStrategy(new RequiredValidation());
-    $securityAnswerValidator->addStrategy(new SecurityAnswerValidation());
-    $securityAnswerErrors = $securityAnswerValidator->validate($_POST['security_answer']);
-
-    if (has_special_char_billing($billing_address)) {
-        $errors[] = "Billing address contains invalid characters. Allowed: letters, numbers, spaces, commas, periods, hyphens.";
-    }
-}
-
 
 // After successful registration, show a message and redirect
-if ($success) {
-    echo "<!DOCTYPE html><html lang='en'><head><meta charset='UTF-8'><meta http-equiv='refresh' content='3;url=login.php'><title>Registration Success</title><style>body{font-family:sans-serif;background:#f5f7fa;display:flex;align-items:center;justify-content:center;height:100vh;} .success-box{background:#fff;padding:2rem 3rem;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,0.1);text-align:center;} .success-box h1{color:#27ae60;} </style></head><body><div class='success-box'><h1>You've signed up successfully.</h1><p>Redirecting to login page...</p></div></body></html>";
-    exit();
+    if ($success) {
+        echo "<!DOCTYPE html><html lang='en'><head><meta charset='UTF-8'><meta http-equiv='refresh' content='3;url=login.php'><title>Registration Success</title><style>body{font-family:sans-serif;background:#f5f7fa;display:flex;align-items:center;justify-content:center;height:100vh;} .success-box{background:#fff;padding:2rem 3rem;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,0.1);text-align:center;} .success-box h1{color:#27ae60;} </style></head><body><div class='success-box'><h1>You've signed up successfully.</h1><p>Redirecting to login page...</p></div></body></html>";
+        exit();
+    }
 }
-?>
-<!DOCTYPE html>
+    ?>
+    <!DOCTYPE html>
 
-
+    <html>
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -622,13 +639,13 @@ if ($success) {
             <div class="auth-box">
                 <h1>Student Registration</h1>
 
-                <?php if (!empty($errors)): ?>
+    <?php if (!empty($errors)): ?>
                     <div class="error">
-                        <?php foreach ($errors as $error): ?>
+                    <?php foreach ($errors as $error): ?>
                             <p><?= htmlspecialchars($error) ?></p>
                         <?php endforeach; ?>
                     </div>
-                <?php endif; ?>
+                    <?php endif; ?>
 
                 <form action="register.php" method="post" id="registrationForm">
                     <div class="form-group">
@@ -745,136 +762,142 @@ if ($success) {
 
         <footer>
             <p>&copy; <?= date('Y') ?> EduVote. All rights reserved.</p>
-        </footer>
+    </footer>
 
-        <script>
-            document.getElementById('registrationForm').addEventListener('submit', function (e) {
-                e.preventDefault();
-                grecaptcha.ready(function () {
-                    grecaptcha.execute('6LfLcC0rAAAAAG3ZmASAUwWVyYf4dY4GBNmZRZFj', {action: 'register'}).then(function (token) {
-                        var form = document.getElementById('registrationForm');
-                        var input = document.createElement('input');
-                        input.type = 'hidden';
-                        input.name = 'g-recaptcha-response';
-                        input.value = token;
-                        form.appendChild(input);
-                        form.submit();
-                    });
+    <script>
+        document.getElementById('registrationForm').addEventListener('submit', function (e) {
+            e.preventDefault();
+            grecaptcha.ready(function () {
+                grecaptcha.execute('6LfLcC0rAAAAAG3ZmASAUwWVyYf4dY4GBNmZRZFj', {action: 'register'}).then(function (token) {
+                    var form = document.getElementById('registrationForm');
+                    var input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.name = 'g-recaptcha-response';
+                    input.value = token;
+                    form.appendChild(input);
+                    form.submit();
                 });
             });
+        });
 
-            // Password show/hide
-            function togglePassword() {
-                var pwd = document.getElementById('password');
-                pwd.type = pwd.type === 'password' ? 'text' : 'password';
+        // Password show/hide
+        function togglePassword() {
+            var pwd = document.getElementById('password');
+            pwd.type = pwd.type === 'password' ? 'text' : 'password';
+        }
+
+        // General input validation function
+        function validateInput(input, fieldName) {
+            const feedback = document.getElementById(`${fieldName}_feedback`);
+            const value = input.value;
+            let errorMessage = '';
+
+            if (input.tagName === 'SELECT' && value === '') {
+            errorMessage = 'This field is required.';
+            } else if (input.type === 'text' || input.type === 'textarea') {
+            if (value === '') {
+            errorMessage = 'This field is required.';
+            } else if (fieldName === 'student_id') {
+            // Check length: Must be more than 10 characters (== 10)
+            if (value.length !== 10) {
+            errorMessage = 'Student ID must be more than 10 characters.';
+            } else {
+            // Check for special characters (only allow A-Z and 0-9)
+            const specialCharRegex = /[^A-Z0-9]/; // Input is uppercase (from toUpperCase())
+                    if (specialCharRegex.test(value)) {
+            errorMessage = 'Student ID cannot contain special characters (only letters and numbers allowed).';
+            } else if (!/[A-Z]/.test(value) || !/[0-9]/.test(value)) {
+            errorMessage = 'Student ID must contain both letters and numbers.';
             }
+            }
+            // email verify
+            else if (fieldName === 'email') {
+            const emailRegex = /^[a-zA-Z0-9._%+-]+@student\.tarc\.edu\.my$/;
+            if (!emailRegex.test(value)) {
+                errorMessage = 'Email must be a valid TARC student email (ends with @student.tarc.edu.my).';
 
-            // General input validation function
-            function validateInput(input, fieldName) {
-                const feedback = document.getElementById(`${fieldName}_feedback`);
-                const value = input.value;
-                let errorMessage = '';
 
-                if (input.tagName === 'SELECT' && value === '') {
-                    errorMessage = 'This field is required.';
-                } else if (input.type === 'text' || input.type === 'textarea') {
-                    if (value === '') {
-                        errorMessage = 'This field is required.';
-                    } else if (fieldName === 'student_id') {
-                        // Check length: Must be more than 10 characters (== 10)
-                        if (value.length !== 10) {
-                            errorMessage = 'Student ID must be more than 10 characters.';
-                        } else {
-                            // Check for special characters (only allow A-Z and 0-9)
-                            const specialCharRegex = /[^A-Z0-9]/; // Input is uppercase (from toUpperCase())
-                            if (specialCharRegex.test(value)) {
-                                errorMessage = 'Student ID cannot contain special characters (only letters and numbers allowed).';
-                            } else if (!/[A-Z]/.test(value) || !/[0-9]/.test(value)) {
-                                errorMessage = 'Student ID must contain both letters and numbers.';
-                            }
-                        }
-                    } else if (fieldName === 'security_answer') {
-                        const specialCharRegex = /[^a-zA-Z0-9]/;
-                        if (specialCharRegex.test(value)) {
-                            errorMessage = "Security answer cannot contain special characters (only letters and numbers allowed).";
-                        }
-                    } else if (fieldName === 'billing_address') {
-                        const allowedCharsRegex = /^[a-zA-Z0-9 ,.-]+$/; // Allow , . -
-                        if (!allowedCharsRegex.test(value)) {
-                            errorMessage = "Billing address may only contain letters, numbers, spaces, commas, periods, and hyphens.";
-                        }
-                    }
-
+            } else if (fieldName === 'security_answer') {
+                const specialCharRegex = /[^a-zA-Z0-9]/;
+                if (specialCharRegex.test(value)) {
+                    errorMessage = "Security answer cannot contain special characters (only letters and numbers allowed).";
                 }
-
-                if (errorMessage) {
-                    feedback.textContent = `⚠️ ${errorMessage}`;
-                    input.classList.add('invalid');
-                    input.classList.remove('valid');
-                } else {
-                    feedback.textContent = '';
-                    input.classList.add('valid');
-                    input.classList.remove('invalid');
+            } else if (fieldName === 'billing_address') {
+                const allowedCharsRegex = /^[a-zA-Z0-9 ,.-]+$/; // Allow , . -
+                if (!allowedCharsRegex.test(value)) {
+                    errorMessage = "Billing address may only contain letters, numbers, spaces, commas, periods, and hyphens.";
                 }
             }
+
+        }
+
+        if (errorMessage) {
+            feedback.textContent = `⚠️ ${errorMessage}`;
+            input.classList.add('invalid');
+            input.classList.remove('valid');
+        } else {
+            feedback.textContent = '';
+            input.classList.add('valid');
+            input.classList.remove('invalid');
+            }
+        }
 
 // Password validation
-            function validatePassword() {
-                const password = document.getElementById('password');
-                const passwordFeedback = document.getElementById('password_feedback');
-                const val = password.value;
-                let strength = 0;
-                if (val.length >= 8)
-                    strength++;
-                if (/[A-Z]/.test(val))
-                    strength++;
-                if (/[a-z]/.test(val))
-                    strength++;
-                if (/[0-9]/.test(val))
-                    strength++;
-                if (/[^a-zA-Z0-9]/.test(val))
-                    strength++;
+        function validatePassword() {
+            const password = document.getElementById('password');
+            const passwordFeedback = document.getElementById('password_feedback');
+            const val = password.value;
+            let strength = 0;
+            if (val.length >= 8)
+                strength++;
+            if (/[A-Z]/.test(val))
+                strength++;
+            if (/[a-z]/.test(val))
+                strength++;
+            if (/[0-9]/.test(val))
+                strength++;
+            if (/[^a-zA-Z0-9]/.test(val))
+                strength++;
 
-                let errorMessage = '';
-                if (val.length < 8) {
-                    errorMessage = 'Password must be at least 8 characters.';
-                } else if (!/[A-Z]/.test(val)) {
-                    errorMessage = 'Include an uppercase letter.';
-                } else if (!/[a-z]/.test(val)) {
-                    errorMessage = 'Include a lowercase letter.';
-                } else if (!/[0-9]/.test(val)) {
-                    errorMessage = 'Include a number.';
-                } else if (!/[^a-zA-Z0-9]/.test(val)) {
-                    errorMessage = 'Include a symbol.';
-                }
-
-                if (errorMessage) {
-                    passwordFeedback.textContent = `⚠️ ${errorMessage}`;
-                    password.classList.add('invalid');
-                    password.classList.remove('valid');
-                } else {
-                    passwordFeedback.textContent = '';
-                    password.classList.add('valid');
-                    password.classList.remove('invalid');
-                }
+            let errorMessage = '';
+            if (val.length < 8) {
+                errorMessage = 'Password must be at least 8 characters.';
+            } else if (!/[A-Z]/.test(val)) {
+                errorMessage = 'Include an uppercase letter.';
+            } else if (!/[a-z]/.test(val)) {
+                errorMessage = 'Include a lowercase letter.';
+            } else if (!/[0-9]/.test(val)) {
+                errorMessage = 'Include a number.';
+            } else if (!/[^a-zA-Z0-9]/.test(val)) {
+                errorMessage = 'Include a symbol.';
             }
+
+            if (errorMessage) {
+                passwordFeedback.textContent = `⚠️ ${errorMessage}`;
+                password.classList.add('invalid');
+                password.classList.remove('valid');
+            } else {
+                passwordFeedback.textContent = '';
+                password.classList.add('valid');
+                password.classList.remove('invalid');
+            }
+        }
 
 // Confirm password validation
-            function validateConfirmPassword() {
-                const password = document.getElementById('password');
-                const confirmPassword = document.getElementById('confirm-password');
-                const confirmPasswordFeedback = document.getElementById('confirm_password_feedback');
-                if (confirmPassword.value !== password.value) {
-                    confirmPasswordFeedback.textContent = '⚠️ Passwords do not match.';
-                    confirmPassword.classList.add('invalid');
-                    confirmPassword.classList.remove('valid');
-                } else {
-                    confirmPasswordFeedback.textContent = '';
-                    confirmPassword.classList.add('valid');
-                    confirmPassword.classList.remove('invalid');
-                }
+        function validateConfirmPassword() {
+            const password = document.getElementById('password');
+            const confirmPassword = document.getElementById('confirm-password');
+            const confirmPasswordFeedback = document.getElementById('confirm_password_feedback');
+            if (confirmPassword.value !== password.value) {
+                confirmPasswordFeedback.textContent = '⚠️ Passwords do not match.';
+                confirmPassword.classList.add('invalid');
+                confirmPassword.classList.remove('valid');
+            } else {
+                confirmPasswordFeedback.textContent = '';
+                confirmPassword.classList.add('valid');
+                confirmPassword.classList.remove('invalid');
             }
-        </script>
+        }
+    </script>
     </body>
-
 </html>   
