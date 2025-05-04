@@ -46,11 +46,13 @@ class PasswordStrengthValidation implements ValidationStrategy {
 class EmailValidation implements ValidationStrategy {
 
     public function validate($value): ?string {
-        if (!filter_var($value, FILTER_VALIDATE_EMAIL) || !str_ends_with($value, '@.com'))
-            return "Invalid email format. Email must end with @.com";
+        if (!filter_var($value, FILTER_VALIDATE_EMAIL) || !preg_match('/@student\.tarc\.edu\.my$/', $value)) {
+            return "Invalid email format. Email must be a valid format and end with @student.tarc.edu.my.";
+        }
         return null;
     }
 }
+
 
 class SecurityAnswerValidation implements ValidationStrategy {
 
@@ -84,15 +86,23 @@ function has_special_char($str) {
     return preg_match('/[^a-zA-Z0-9 \-_]/', $str);
 }
 
-// Helper function for email validation
+// Check if form is submitted
+if ($_SERVER["REQUEST_METHOD"] === "POST") {
+
+    // Ensure $email is set from POST data
+    $email = isset($_POST['email']) ? $_POST['email'] : '';
+}
+    // Helper function for email validation
 function is_valid_email($email) {
-    return filter_var($email, FILTER_VALIDATE_EMAIL) && str_ends_with($email, '@student.tarc.edu.my');
+    return filter_var($email, FILTER_VALIDATE_EMAIL) && preg_match('/@student\.tarc\.edu\.my$/', $email);
 }
 
 // Helper: Only allow certain characters in email
 function sanitize_email($email) {
     return preg_replace('/[^a-zA-Z0-9@.]/', '', $email);
 }
+
+
 
 // Helper: Allow letters, numbers, spaces, commas, periods, and hyphens in addresses
 function sanitize_address($str) {
@@ -105,6 +115,29 @@ function has_special_char_billing($str) {
 }
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    // Ensure $email is set from POST data
+    $email = isset($_POST['email']) ? $_POST['email'] : '';
+
+    // Helper function for email validation
+    function is_valid_email($email) {
+        return filter_var($email, FILTER_VALIDATE_EMAIL) && preg_match('/@student\.tarc\.edu\.my$/', $email);
+    }
+
+    // Helper: Only allow certain characters in email
+    function sanitize_email($email) {
+        return preg_replace('/[^a-zA-Z0-9@.]/', '', $email);
+    }
+
+    // Helper: Allow letters, numbers, spaces, commas, periods, and hyphens in addresses
+    function sanitize_address($str) {
+        return preg_replace('/[^a-zA-Z0-9 ,.-]/', '', $str); // Added `-` (hyphen)
+    }
+
+    // New helper function (or modify has_special_char)
+    function has_special_char_billing($str) {
+        return preg_match('/[^a-zA-Z0-9 ,.-]/', $str); // Allow , . -
+    }
+
     // Get and sanitize input data
     $full_name = htmlspecialchars(trim($_POST['full_name']), ENT_QUOTES, 'UTF-8');
     $full_name = preg_replace('/[^a-zA-Z ]/', '', $full_name);
@@ -125,8 +158,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $errors[] = "Full name too long.";
     if (strlen($student_id) > 20)
         $errors[] = "Student ID too long.";
-    if (strlen($student_id) <= 10)
-        $errors[] = "Student ID must be more than 10 characters.";
+    if (strlen($student_id) !== 10)
+        $errors[] = "Student ID must be exactly 10 characters.";
     if (strlen($email) > 100)
         $errors[] = "Email too long.";
     if (strlen($program) > 50)
@@ -181,7 +214,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
     // Student ID must contain both letters and numbers
     if (!preg_match('/[a-zA-Z]/', $student_id) || !preg_match('/[0-9]/', $student_id)) {
-        $errors[] = "Student ID must contain both letters and numbers, and need to have 10 character.";
+        $errors[] = "Student ID must contain both letters and numbers, and need to have exactly 10 character.";
     }
 
     // Verify reCAPTCHA v3
@@ -260,6 +293,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     }
 }
 
+
 // After successful registration, show a message and redirect
 if ($success) {
     echo "<!DOCTYPE html><html lang='en'><head><meta charset='UTF-8'><meta http-equiv='refresh' content='3;url=login.php'><title>Registration Success</title><style>body{font-family:sans-serif;background:#f5f7fa;display:flex;align-items:center;justify-content:center;height:100vh;} .success-box{background:#fff;padding:2rem 3rem;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,0.1);text-align:center;} .success-box h1{color:#27ae60;} </style></head><body><div class='success-box'><h1>You've signed up successfully.</h1><p>Redirecting to login page...</p></div></body></html>";
@@ -267,7 +301,7 @@ if ($success) {
 }
 ?>
 <!DOCTYPE html>
-<html lang="en">
+
 
     <head>
         <meta charset="UTF-8">
@@ -747,8 +781,8 @@ if ($success) {
                     if (value === '') {
                         errorMessage = 'This field is required.';
                     } else if (fieldName === 'student_id') {
-                        // Check length: Must be more than 10 characters (>= 11)
-                        if (value.length <= 10) {
+                        // Check length: Must be more than 10 characters (== 10)
+                        if (value.length !== 10) {
                             errorMessage = 'Student ID must be more than 10 characters.';
                         } else {
                             // Check for special characters (only allow A-Z and 0-9)
@@ -770,6 +804,7 @@ if ($success) {
                             errorMessage = "Billing address may only contain letters, numbers, spaces, commas, periods, and hyphens.";
                         }
                     }
+
                 }
 
                 if (errorMessage) {
@@ -842,4 +877,4 @@ if ($success) {
         </script>
     </body>
 
-</html>    
+</html>   
