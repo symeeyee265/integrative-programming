@@ -66,7 +66,7 @@ function has_special_char($str) {
 
 // Helper function for email validation
 function is_valid_email($email) {
-    return filter_var($email, FILTER_VALIDATE_EMAIL) && strpos($email, '@') !== false && strpos($email, '.') !== false;
+    return filter_var($email, FILTER_VALIDATE_EMAIL) && strpos($email, '@')!== false && strpos($email, '.')!== false;
 }
 
 // Helper: Only allow certain characters in email
@@ -91,7 +91,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $student_status = htmlspecialchars(trim($_POST['student_status']), ENT_QUOTES, 'UTF-8');
     $billing_address = sanitize_address(trim($_POST['billing_address']));
     $current_address = sanitize_address(trim($_POST['current_address']));
-    $recaptcha_response = $_POST['g-recaptcha-response'] ?? '';
+    $recaptcha_response = $_POST['g-recaptcha-response']?? '';
 
     // Length restrictions
     if (strlen($full_name) > 100) $errors[] = "Full name too long.";
@@ -118,7 +118,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         !preg_match('/[^a-zA-Z0-9]/', $password)) {
         $errors[] = "Password must be at least 8 characters and include uppercase, lowercase, number, and symbol.";
     }
-    if ($password !== $confirm_password) $errors[] = "Passwords do not match.";
+    if ($password!== $confirm_password) $errors[] = "Passwords do not match.";
 
     // Required fields
     if (empty($full_name)) $errors[] = "Full name is required.";
@@ -154,7 +154,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     // Check if student ID or email already exists
     if (empty($errors)) {
         try {
-            $stmt = $conn->prepare("SELECT user_id FROM users WHERE student_id = ? OR email = ?");
+            $stmt = $conn->prepare("SELECT user_id FROM users WHERE student_id =? OR email =?");
             $stmt->execute([$student_id, $email]);
 
             if ($stmt->rowCount() > 0) {
@@ -175,7 +175,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 INSERT INTO users (
                     student_id, password, full_name, email, program, is_admin,
                     date_of_birth, student_status, billing_address, current_address
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?,?,?,?,?,?,?,?,?,?)
             ");
             $stmt->execute([
                 $student_id, $hashed_password, $full_name, $email, $program, $is_admin,
@@ -205,7 +205,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
 // After successful registration, show a message and redirect
 if ($success) {
-    echo "<!DOCTYPE html><html lang='en'><head><meta charset='UTF-8'><meta http-equiv='refresh' content='3;url=login.php'><title>Registration Success</title><style>body{font-family:sans-serif;background:#f5f7fa;display:flex;align-items:center;justify-content:center;height:100vh;} .success-box{background:#fff;padding:2rem 3rem;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,0.1);text-align:center;} .success-box h1{color:#27ae60;} </style></head><body><div class='success-box'><h1>You're all set! Registration completed successfully.</h1><p>Redirecting to login page...</p></div></body></html>";
+    echo "<!DOCTYPE html><html lang='en'><head><meta charset='UTF-8'><meta http-equiv='refresh' content='3;url=login.php'><title>Registration Success</title><style>body{font-family:sans-serif;background:#f5f7fa;display:flex;align-items:center;justify-content:center;height:100vh;} .success-box{background:#fff;padding:2rem 3rem;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,0.1);text-align:center;} .success-box h1{color:#27ae60;} </style></head><body><div class='success-box'><h1>You've signed up successfully.</h1><p>Redirecting to login page...</p></div></body></html>";
     exit();
 }
 ?>
@@ -299,7 +299,7 @@ if ($success) {
             font-weight: 500;
         }
 
-        .form-group input, .form-group select {
+        .form-group input,.form-group select {
             width: 100%;
             padding: 0.8rem;
             border: 1px solid #ddd;
@@ -423,85 +423,93 @@ if ($success) {
             <form action="register.php" method="post" id="registrationForm">
                 <div class="form-group">
                     <label for="full-name">Full Name</label>
-                    <input type="text" id="full-name" name="full_name" required>
+                    <input type="text" id="full-name" name="full_name" required oninput="validateInput(this, 'full_name')">
+                    <span class="feedback" id="full_name_feedback"></span>
                 </div>
 
                 <div class="form-group">
                     <label for="student-id">Student ID</label>
-                    <input type="text" id="student-id" name="student_id" required>
+                    <input type="text" id="student-id" name="student_id" required oninput="validateInput(this, 'student_id')">
+                    <span class="feedback" id="student_id_feedback"></span>
                 </div>
 
                 <div class="form-group">
                     <label for="email">Email</label>
-                    <input type="email" id="email" name="email" required>
+                    <input type="email" id="email" name="email" required oninput="validateInput(this, 'email')">
+                    <span class="feedback" id="email_feedback"></span>
                 </div>
 
                 <div class="form-group">
                     <label for="program">Program of Study</label>
-                    <select id="program" name="program" required>
+                    <select id="program" name="program" required onchange="validateInput(this, 'program')">
                         <option value="">Select your program</option>
-                        <option value="Computer Science" <?php if (isset($_POST['program']) && $_POST['program'] === 'Computer Science') echo 'selected'; ?>>Computer Science</option>
-                        <option value="Engineering" <?php if (isset($_POST['program']) && $_POST['program'] === 'Engineering') echo 'selected'; ?>>Engineering</option>
-                        <option value="Business" <?php if (isset($_POST['program']) && $_POST['program'] === 'Business') echo 'selected'; ?>>Business</option>
-                        <option value="Arts & Humanities" <?php if (isset($_POST['program']) && $_POST['program'] === 'Arts & Humanities') echo 'selected'; ?>>Arts & Humanities</option>
-                        <option value="Natural Sciences" <?php if (isset($_POST['program']) && $_POST['program'] === 'Natural Sciences') echo 'selected'; ?>>Natural Sciences</option>
-                        <option value="Other" <?php if (isset($_POST['program']) && $_POST['program'] === 'Other') echo 'selected'; ?>>Other</option>
+                        <option value="Computer Science" <?php if (isset($_POST['program']) && $_POST['program'] === 'Computer Science') echo 'selected';?>>Computer Science</option>
+                        <option value="Engineering" <?php if (isset($_POST['program']) && $_POST['program'] === 'Engineering') echo 'selected';?>>Engineering</option>
+                        <option value="Business" <?php if (isset($_POST['program']) && $_POST['program'] === 'Business') echo 'selected';?>>Business</option>
+                        <option value="Arts & Humanities" <?php if (isset($_POST['program']) && $_POST['program'] === 'Arts & Humanities') echo 'selected';?>>Arts & Humanities</option>
+                        <option value="Natural Sciences" <?php if (isset($_POST['program']) && $_POST['program'] === 'Natural Sciences') echo 'selected';?>>Natural Sciences</option>
+                        <option value="Other" <?php if (isset($_POST['program']) && $_POST['program'] === 'Other') echo 'selected';?>>Other</option>
                     </select>
+                    <span class="feedback" id="program_feedback"></span>
                 </div>
 
                 <div class="form-group">
                     <label for="password">Password</label>
-                    <input type="password" id="password" name="password" required>
+                    <input type="password" id="password" name="password" required oninput="validatePassword()">
                     <span class="show-hide" onclick="togglePassword()">👁️</span>
+                    <span class="feedback" id="password_feedback"></span>
                 </div>
 
                 <div class="form-group">
                     <label for="confirm-password">Confirm Password</label>
-                    <input type="password" id="confirm-password" name="confirm_password" required>
+                    <input type="password" id="confirm-password" name="confirm_password" required oninput="validateConfirmPassword()">
+                    <span class="feedback" id="confirm_password_feedback"></span>
                 </div>
 
                 <div class="form-group">
                     <label for="date-of-birth">Date of Birth</label>
-                    <input type="date" id="date-of-birth" name="date_of_birth" required>
+                    <input type="date" id="date-of-birth" name="date_of_birth" required oninput="validateInput(this, 'date_of_birth')">
+                    <span class="feedback" id="date_of_birth_feedback"></span>
                 </div>
 
                 <div class="form-group">
                     <label for="student-status">Student Status</label>
-                    <select id="student-status" name="student_status" required>
+                    <select id="student-status" name="student_status" required onchange="validateInput(this, 'student_status')">
                         <option value="">Select Status</option>
                         <option value="Current Student">Current Student</option>
                         <option value="Alumni">Alumni</option>
                     </select>
+                    <span class="feedback" id="student_status_feedback"></span>
                 </div>
 
                 <div class="form-group">
                     <label for="security-question">Security Question</label>
-                    <select id="security-question" name="security_question" required>
+                    <select id="security-question" name="security_question" required onchange="validateInput(this, 'security_question')">
                         <option value="">Select a question</option>
                         <option value="What is your mother's maiden name?">What is your mother's maiden name?</option>
                         <option value="What was your first pet's name?">What was your first pet's name?</option>
                         <option value="What is your favorite book?">What is your favorite book?</option>
                         <option value="What city were you born in?">What city were you born in?</option>
                     </select>
-                    <span class="feedback" id="securityQuestionFeedback"></span>
+                    <span class="feedback" id="security_question_feedback"></span>
                 </div>
 
                 <div class="form-group">
                     <label for="security-answer">Security Answer</label>
-                    <input type="text" id="security-answer" name="security_answer" maxlength="255" required>
-                    <span class="feedback" id="securityAnswerFeedback"></span>
+                    <input type="text" id="security-answer" name="security_answer" maxlength="255" required oninput="validateInput(this, 'security_answer')">
+                    <span class="feedback" id="security_answer_feedback"></span>
                 </div>
 
                 <div class="form-group">
                     <label for="billing-address">Billing Address</label>
-                    <textarea id="billing-address" name="billing_address" maxlength="255" required></textarea>
-                    <span class="feedback" id="billingAddressFeedback"></span>
+                    <textarea id="billing-address" name="billing_address" maxlength="255" required oninput="validateInput(this, 'billing_address')"></textarea>
+                    <span class="feedback" id="billing_address_feedback"></span>
                 </div>
 
                 <div class="form-group">
                     <label for="current-address">Current Address</label>
-                    <textarea id="current-address" name="current_address" maxlength="255" required></textarea>
-                    <span class="feedback" id="currentAddressFeedback"></span>
+                    <textarea id="current-address" name="current_address" maxlength="255" required oninput="validateInput(this, 'current_address')"></textarea>
+                    <span class="feedback" id="current_address_feedback"></span>
                 </div>
 
                 <button type="submit" class="btn">Register</button>
@@ -536,14 +544,44 @@ if ($success) {
         // Password show/hide
         function togglePassword() {
             var pwd = document.getElementById('password');
-            pwd.type = pwd.type === 'password' ? 'text' : 'password';
+            pwd.type = pwd.type === 'password'? 'text' : 'password';
         }
 
-        // Password strength meter and validation
-        const password = document.getElementById('password');
-        const strengthBar = document.getElementById('strengthBar');
-        const passwordError = document.getElementById('passwordError');
-        password.addEventListener('input', function() {
+        // General input validation function
+        function validateInput(input, fieldName) {
+            const feedback = document.getElementById(`${fieldName}_feedback`);
+            const value = input.value;
+            let errorMessage = '';
+
+            if (input.tagName === 'SELECT' && value === '') {
+                errorMessage = 'This field is required.';
+            } else if (input.type === 'text' || input.type === 'textarea') {
+                if (value === '') {
+                    errorMessage = 'This field is required.';
+                } else if (fieldName === 'full_name' || fieldName === 'student_id' || fieldName === 'program' || fieldName === 'student_status') {
+                    const specialCharRegex = /[^a-zA-Z0-9 \-_]/;
+                    if (specialCharRegex.test(value)) {
+                        errorMessage = `Please don't put special character in ${fieldName.replace('_', ' ')}`;
+                    }
+                } else if (fieldName === 'email') {
+                    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                    if (!emailRegex.test(value)) {
+                        errorMessage = 'Please enter a valid email address.';
+                    }
+                }
+            }
+
+            if (errorMessage) {
+                feedback.textContent = `⚠️ ${errorMessage}`;
+            } else {
+                feedback.textContent = '✅';
+            }
+        }
+
+        // Password validation
+        function validatePassword() {
+            const password = document.getElementById('password');
+            const passwordFeedback = document.getElementById('password_feedback');
             const val = password.value;
             let strength = 0;
             if (val.length >= 8) strength++;
@@ -551,28 +589,38 @@ if ($success) {
             if (/[a-z]/.test(val)) strength++;
             if (/[0-9]/.test(val)) strength++;
             if (/[^a-zA-Z0-9]/.test(val)) strength++;
-            // Meter
-            strengthBar.style.width = (strength * 20) + '%';
-            strengthBar.className = 'strength-meter-bar';
-            if (strength <= 2) strengthBar.classList.add('strength-weak');
-            else if (strength === 3 || strength === 4) strengthBar.classList.add('strength-medium');
-            else strengthBar.classList.add('strength-strong');
-            // Real-time feedback
-            if (val.length < 8) passwordError.textContent = 'Password must be at least 8 characters.';
-            else if (!/[A-Z]/.test(val)) passwordError.textContent = 'Include an uppercase letter.';
-            else if (!/[a-z]/.test(val)) passwordError.textContent = 'Include a lowercase letter.';
-            else if (!/[0-9]/.test(val)) passwordError.textContent = 'Include a number.';
-            else if (!/[^a-zA-Z0-9]/.test(val)) passwordError.textContent = 'Include a symbol.';
-            else passwordError.textContent = '';
-        });
-        // Confirm password real-time
-        document.getElementById('confirm-password').addEventListener('input', function() {
-            if (this.value !== password.value) {
-                document.getElementById('confirmPasswordError').textContent = 'Passwords do not match.';
-            } else {
-                document.getElementById('confirmPasswordError').textContent = '';
+
+            let errorMessage = '';
+            if (val.length < 8) {
+                errorMessage = 'Password must be at least 8 characters.';
+            } else if (!/[A-Z]/.test(val)) {
+                errorMessage = 'Include an uppercase letter.';
+            } else if (!/[a-z]/.test(val)) {
+                errorMessage = 'Include a lowercase letter.';
+            } else if (!/[0-9]/.test(val)) {
+                errorMessage = 'Include a number.';
+            } else if (!/[^a-zA-Z0-9]/.test(val)) {
+                errorMessage = 'Include a symbol.';
             }
-        });
+
+            if (errorMessage) {
+                passwordFeedback.textContent = `⚠️ ${errorMessage}`;
+            } else {
+                passwordFeedback.textContent = '✅';
+            }
+        }
+
+        // Confirm password validation
+        function validateConfirmPassword() {
+            const password = document.getElementById('password');
+            const confirmPassword = document.getElementById('confirm-password');
+            const confirmPasswordFeedback = document.getElementById('confirm_password_feedback');
+            if (confirmPassword.value!== password.value) {
+                confirmPasswordFeedback.textContent = '⚠️ Passwords do not match.';
+            } else {
+                confirmPasswordFeedback.textContent = '✅';
+            }
+        }
     </script>
 </body>
 </html>    
