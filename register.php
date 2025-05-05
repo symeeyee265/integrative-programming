@@ -676,7 +676,7 @@ if ($success) {
 
                     <div class="form-group">
                         <label for="email" class="required">Email</label>
-                        <input type="email" id="email" name="email" required oninput="validateInput(this, 'email')">
+                        <input type="email" id="email" name="email" placeholder="example@student.tarc.edu.my." required oninput="validateInput(this, 'email')">
                         <span class="feedback" id="email_feedback"></span>
                     </div>
 
