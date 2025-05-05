@@ -5,15 +5,88 @@ require_once 'dbConnection.php';
 $error = '';
 $success = '';
 
+$max_attempts = 3;
+$lockout_time = 300; // 5 minutes in seconds
+
+if (!isset($_SESSION['reset_attempts'])) {
+    $_SESSION['reset_attempts'] = 0;
+    $_SESSION['reset_last_attempt'] = time();
+}
+
+// Check if user is locked out
+if ($_SESSION['reset_attempts'] >= $max_attempts) {
+    $last_attempt = $_SESSION['reset_last_attempt'];
+    if (time() - $last_attempt < $lockout_time) {
+        $remaining = $lockout_time - (time() - $last_attempt);
+        $error = "Too many reset attempts. Please try again in " . gmdate("i:s", $remaining) . " minutes.";
+        // Stop further processing
+        return;
+    } else {
+        // Reset after lockout period
+        $_SESSION['reset_attempts'] = 0;
+        $_SESSION['reset_last_attempt'] = time();
+    }
+}
+
+// --- Strategy Pattern for Validation ---
+interface ValidationStrategy {
+    public function validate($value): array;
+}
+
+class PasswordValidation implements ValidationStrategy {
+    public function validate($value): array {
+        $errors = [];
+        if (strlen($value) < 8) {
+            $errors[] = "Password must be at least 8 characters";
+        }
+        if (!preg_match('/[A-Z]/', $value)) {
+            $errors[] = "Password must include an uppercase letter";
+        }
+        if (!preg_match('/[a-z]/', $value)) {
+            $errors[] = "Password must include a lowercase letter";
+        }
+        if (!preg_match('/[0-9]/', $value)) {
+            $errors[] = "Password must include a number";
+        }
+        if (!preg_match('/[^a-zA-Z0-9]/', $value)) {
+            $errors[] = "Password must include a symbol";
+        }
+        return $errors;
+    }
+}
+
+class EmailValidation implements ValidationStrategy {
+    public function validate($value): array {
+        $errors = [];
+        if (!filter_var($value, FILTER_VALIDATE_EMAIL)) {
+            $errors[] = "Invalid email format";
+        }
+        if (!preg_match('/@student\\.tarc\\.edu\\.my$/', $value)) {
+            $errors[] = "Must be TARC student email";
+        }
+        return $errors;
+    }
+}
+
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $student_id = $_POST['student_id'];
     $email = $_POST['email'];
-    $security_answer = trim($_POST['security_answer']);
+    $security_question = $_POST['security_question'];
+    $security_answer = trim(strtolower($_POST['security_answer']));
     $new_password = $_POST['new_password'];
     $confirm_password = $_POST['confirm_password'];
 
-    // Validate inputs
-    if ($new_password !== $confirm_password) {
+    // Use strategy pattern for validation
+    $passwordValidator = new PasswordValidation();
+    $emailValidator = new EmailValidation();
+    $passwordErrors = $passwordValidator->validate($new_password);
+    $emailErrors = $emailValidator->validate($email);
+
+    if (!empty($passwordErrors)) {
+        $error = implode('<br>', $passwordErrors);
+    } elseif (!empty($emailErrors)) {
+        $error = implode('<br>', $emailErrors);
+    } elseif ($new_password !== $confirm_password) {
         $error = "Passwords do not match.";
     } else {
         // Check if student ID and email match
@@ -22,19 +95,47 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $user = $stmt->fetch();
 
         if ($user) {
-            // Verify security answer
-            if ($security_answer !== $user['security_answer']) {
-                $error = "Invalid security answer.";
+            // Check if new password is the same as the old password
+            if (password_verify($new_password, $user['password'])) {
+                $error = "Reset password cannot set same like before.";
             } else {
-                // Update password
-                $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
-                $update_stmt = $conn->prepare("UPDATE users SET password = ? WHERE student_id = ?");
-                $update_stmt->execute([$hashed_password, $student_id]);
+                // Verify security answer
+                $ch = curl_init('http://localhost:5001/verify_security');
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($ch, CURLOPT_POST, true);
+                curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+                curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode([
+                    'student_id' => $student_id,
+                    'security_question' => $security_question,
+                    'security_answer' => $security_answer
+                ]));
+                $response = curl_exec($ch);
+                curl_close($ch);
 
-                // Set session flag and redirect
-                $_SESSION['reset_success'] = true;
-                header("Location: login.php");
-                exit(); // Important to prevent further execution
+                if ($response === false) {
+                    $error = "Could not connect to verification service.";
+                } else {
+                    $result = json_decode($response, true);
+                    if ($result === null) {
+                        $error = "Verification service returned invalid response: " . htmlspecialchars($response);
+                    } elseif ($result['result'] !== 'success') {
+                        $error = "Invalid security answer.";
+                        $_SESSION['reset_attempts']++;
+                        $_SESSION['reset_last_attempt'] = time();
+                    } else {
+                        // Update password
+                        $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
+                        $update_stmt = $conn->prepare("UPDATE users SET password = ? WHERE student_id = ?");
+                        $update_stmt->execute([$hashed_password, $student_id]);
+
+                        // Set session flag and redirect
+                        $_SESSION['reset_success'] = true;
+                        $_SESSION['reset_attempts'] = 0;
+                        $_SESSION['reset_last_attempt'] = time();
+                        header("Location: login.php");
+                        exit(); // Important to prevent further execution
+                    }
+                }
             }
         } else {
             $error = "Invalid Student ID or Email.";
@@ -188,6 +289,27 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             text-align: center;
             margin-bottom: 1rem;
         }
+
+        .strength-meter {
+            height: 10px;
+            background-color: #f0f0f0;
+            border-radius: 5px;
+            margin-top: 5px;
+        }
+        .strength-meter-bar {
+            height: 100%;
+            border-radius: 5px;
+            background-color: #4CAF50;
+        }
+        .strength-weak {
+            background-color: #FF5733;
+        }
+        .strength-medium {
+            background-color: #FFC300;
+        }
+        .strength-strong {
+            background-color: #4CAF50;
+        }
     </style>
 </head>
 <body>
@@ -213,10 +335,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     <a href="login.php">Proceed to Login</a>
                 </div>
             <?php else: ?>
-                <form method="POST" action="reset_password.php">
+                <form method="POST" action="resetPassword.php">
                     <div class="form-group">
                         <label for="student-id">Student ID</label>
-                        <input type="text" id="student-id" name="student_id" required>
+                        <input type="text" id="student-id" name="student_id" required oninput="validateStudentId(this)">
+                        <span class="feedback" id="student_id_feedback"></span>
                     </div>
 
                     <div class="form-group">
@@ -224,18 +347,37 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                         <input type="email" id="email" name="email" required>
                     </div>
                     
+                     <div class="form-group">
+                        <label for="security-question" class="required">Security Question</label>
+                        <select id="security-question" name="security_question" required onchange="validateInput(this, 'security_question')">
+                            <option value="">Select a question</option>
+                            <option value="What is your mother's maiden name?">What is your mother's maiden name?</option>
+                            <option value="What was your first pet's name?">What was your first pet's name?</option>
+                            <option value="What is your favorite book?">What is your favorite book?</option>
+                            <option value="What city were you born in?">What city were you born in?</option>
+                        </select>
+                        <span class="feedback" id="security_question_feedback"></span>
+                    </div>
+                    
                     <div class="form-group">
-    <label for="security-answer">Security Answer</label>
-    <input type="text" id="security-answer" name="security_answer" required>
-</div>
+                        <label for="security-answer">Security Answer</label>
+                        <input type="text" id="security-answer" name="security_answer" required>
+                    </div>
                     <div class="form-group">
                         <label for="new-password">New Password</label>
-                        <input type="password" id="new-password" name="new_password" required minlength="8">
+                        <input type="password" id="new-password" name="new_password" required minlength="8" oninput="validatePassword()">
+                        <button type="button" onclick="togglePasswordVisibility('new-password')">Show</button>
+                        <span class="feedback" id="password_feedback"></span>
+                        <div class="strength-meter" id="strengthMeter">
+                            <div class="strength-meter-bar" id="strengthMeterBar"></div>
+                        </div>
                     </div>
 
                     <div class="form-group">
                         <label for="confirm-password">Confirm Password</label>
-                        <input type="password" id="confirm-password" name="confirm_password" required minlength="8">
+                        <input type="password" id="confirm-password" name="confirm_password" required minlength="8" oninput="validateConfirmPassword()">
+                        <button type="button" onclick="togglePasswordVisibility('confirm-password')">Show</button>
+                        <span class="feedback" id="confirm_password_feedback"></span>
                     </div>
 
                     <button type="submit" class="btn">Reset Password</button>
@@ -252,5 +394,101 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         <p>&copy; 2025 EduVote - Campus Voting System</p>
         <p>Contact: <a href="mailto:support@eduvote.edu" style="color: white;">support@eduvote.edu</a></p>
     </footer>
+
+    <script>
+    // Student ID validation: exactly 10 chars, 3 letters, 7 numbers, no special chars
+    function validateStudentId(input) {
+        const feedback = document.getElementById('student_id_feedback');
+        let value = input.value.toUpperCase();
+        input.value = value.replace(/[^A-Z0-9]/g, ''); // Only allow A-Z, 0-9
+        let error = '';
+        if (value.length !== 10) {
+            error = 'Student ID must be exactly 10 characters.';
+        } else {
+            const letters = value.replace(/[^A-Z]/g, '').length;
+            const numbers = value.replace(/[^0-9]/g, '').length;
+            if (letters !== 3 || numbers !== 7) {
+                error = 'Student ID must have 3 letters and 7 numbers.';
+            }
+        }
+        if (error) {
+            feedback.textContent = '⚠️ ' + error;
+            input.classList.add('invalid');
+            input.classList.remove('valid');
+        } else {
+            feedback.textContent = '';
+            input.classList.remove('invalid');
+            input.classList.add('valid');
+        }
+    }
+
+    // Password strength and format validation
+    function validatePassword() {
+        const password = document.getElementById('new-password');
+        const feedback = document.getElementById('password_feedback');
+        const meter = document.getElementById('strengthMeterBar');
+        const val = password.value;
+        let strength = 0;
+        let error = '';
+        if (val.length >= 8) strength++;
+        if (/[A-Z]/.test(val)) strength++;
+        if (/[a-z]/.test(val)) strength++;
+        if (/[0-9]/.test(val)) strength++;
+        if (/[^a-zA-Z0-9]/.test(val)) strength++;
+
+        // Strength meter
+        meter.style.width = (strength * 20) + '%';
+        meter.className = 'strength-meter-bar ' +
+            (strength <= 2 ? 'strength-weak' : strength <= 4 ? 'strength-medium' : 'strength-strong');
+
+        // Format feedback
+        if (val.length < 8) {
+            error = 'Password must be at least 8 characters.';
+        } else if (!/[A-Z]/.test(val)) {
+            error = 'Password must include an uppercase letter.';
+        } else if (!/[a-z]/.test(val)) {
+            error = 'Password must include a lowercase letter.';
+        } else if (!/[0-9]/.test(val)) {
+            error = 'Password must include a number.';
+        } else if (!/[^a-zA-Z0-9]/.test(val)) {
+            error = 'Password must include a symbol.';
+        }
+
+        if (error) {
+            feedback.textContent = '⚠️ ' + error;
+            password.classList.add('invalid');
+            password.classList.remove('valid');
+        } else {
+            feedback.textContent = '';
+            password.classList.remove('invalid');
+            password.classList.add('valid');
+        }
+    }
+
+    // Confirm password validation
+    function validateConfirmPassword() {
+        const password = document.getElementById('new-password');
+        const confirmPassword = document.getElementById('confirm-password');
+        const feedback = document.getElementById('confirm_password_feedback');
+        if (confirmPassword.value !== password.value) {
+            feedback.textContent = '⚠️ Passwords do not match.';
+            confirmPassword.classList.add('invalid');
+            confirmPassword.classList.remove('valid');
+        } else {
+            feedback.textContent = '';
+            confirmPassword.classList.remove('invalid');
+            confirmPassword.classList.add('valid');
+        }
+    }
+
+    function togglePasswordVisibility(fieldId) {
+        const input = document.getElementById(fieldId);
+        if (input.type === 'password') {
+            input.type = 'text';
+        } else {
+            input.type = 'password';
+        }
+    }
+    </script>
 </body>
 </html>
