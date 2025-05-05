@@ -1,7 +1,12 @@
 <?php
-
-
+session_start();
 require_once 'dbConnection.php'; // Database configuration
+
+// make CSRF token
+if (!isset($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32)); // 32字节随机字符串（64字符）
+}
+
 
 // Redirect to homepage if already logged in
 if (isset($_SESSION['user_id'])) {
@@ -27,41 +32,92 @@ if (isset($_SESSION['login_attempts']) && $_SESSION['login_attempts'] >= $max_at
 }
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $student_id = trim($_POST['student_id']);
-    $password = $_POST['password'];
-   
-
-    // Validate inputs
-    if (empty($student_id) || empty($password)) {
-        $error = "Please enter Student ID and Password.";
+    // 1. 验证 CSRF 令牌
+    if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
+        $error = "Security token invalid.";
+        // 计数失败尝试（与 reCAPTCHA 失败逻辑统一）
+        if (!isset($_SESSION['login_attempts'])) {
+            $_SESSION['login_attempts'] = 1;
+        } else {
+            $_SESSION['login_attempts']++;
+        }
+        $_SESSION['last_attempt'] = time();
     } else {
-        try {
-            // Prepare SQL statement to prevent SQL injection
-            $stmt = $conn->prepare("SELECT user_id, student_id, password, is_admin FROM users WHERE student_id = :student_id");
-            $stmt->bindParam(':student_id', $student_id);
-            $stmt->execute();
+        // 2. 继续验证 reCAPTCHA（仅当 CSRF 验证通过时）
+        $recaptcha_response = $_POST['g-recaptcha-response'] ?? '';
+        if (!empty($recaptcha_response)) {
+            $recaptcha_secret = '6LfLcC0rAAAAALHgWE2Vo4ogBMtPTomQ7w2mmi92';
+            $recaptcha_verify = file_get_contents("https://www.google.com/recaptcha/api/siteverify?secret={$recaptcha_secret}&response={$recaptcha_response}");
+            $recaptcha_data = json_decode($recaptcha_verify);
+            if (!$recaptcha_data->success || $recaptcha_data->score < 0.5) {
+                $error = "reCAPTCHA verification failed.";
+                // 计数失败尝试（与 CSRF 失败逻辑统一）
+                if (!isset($_SESSION['login_attempts'])) {
+                    $_SESSION['login_attempts'] = 1;
+                } else {
+                    $_SESSION['login_attempts']++;
+                }
+                $_SESSION['last_attempt'] = time();
+            }
+        } else {
+            $error = "Please complete the reCAPTCHA verification.";
+            // 计数失败尝试（用户未提交 reCAPTCHA）
+            if (!isset($_SESSION['login_attempts'])) {
+                $_SESSION['login_attempts'] = 1;
+            } else {
+                $_SESSION['login_attempts']++;
+            }
+            $_SESSION['last_attempt'] = time();
+    }
+    
+            }
 
-            if ($stmt->rowCount() == 1) {
-                $user = $stmt->fetch(PDO::FETCH_ASSOC);
+        // 3. 后续输入验证（仅当 CSRF 和 reCAPTCHA 均通过时）
+        if (empty($error)) {
+            $student_id = trim($_POST['student_id']);
+            $password = $_POST['password'];
 
-                // Verify password (assuming passwords are hashed in the database)
-                if (password_verify($password, $user['password'])) {
-                    // Reset the login attempts on successful login
-                    unset($_SESSION['login_attempts']);
-                    unset($_SESSION['last_attempt']);
+        // Validate inputs
+        if (empty($student_id) || empty($password)) {
+            $error = "Please enter Student ID and Password.";
+        } else {
+            try {
+                // Prepare SQL statement to prevent SQL injection
+                $stmt = $conn->prepare("SELECT user_id, student_id, password, is_admin FROM users WHERE student_id = :student_id");
+                $stmt->bindParam(':student_id', $student_id);
+                $stmt->execute();
 
-                    // Set session variables
-                    $_SESSION['user_id'] = $user['user_id'];
-                    $_SESSION['student_id'] = $user['student_id'];
-                    $_SESSION['is_admin'] = $user['is_admin'];
+                if ($stmt->rowCount() == 1) {
+                    $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-                    // Redirect to appropriate page based on user type
-                    if ($user['is_admin']) {
-                        header("Location: admin_dashboard.php");
+                    // Verify password (assuming passwords are hashed in the database)
+                    if (password_verify($password, $user['password'])) {
+                        // Reset the login attempts on successful login
+                        unset($_SESSION['login_attempts']);
+                        unset($_SESSION['last_attempt']);
+
+                        // Set session variables
+                        $_SESSION['user_id'] = $user['user_id'];
+                        $_SESSION['student_id'] = $user['student_id'];
+                        $_SESSION['is_admin'] = $user['is_admin'];
+
+                        // Redirect to appropriate page based on user type
+                        if ($user['is_admin']) {
+                            header("Location: admin_dashboard.php");
+                        } else {
+                            header("Location: homePage.php");
+                        }
+                        exit();
                     } else {
-                        header("Location: homePage.php");
+                        // Increment the login attempts on failed login
+                        if (!isset($_SESSION['login_attempts'])) {
+                            $_SESSION['login_attempts'] = 1;
+                        } else {
+                            $_SESSION['login_attempts']++;
+                        }
+                        $_SESSION['last_attempt'] = time();
+                        $error = "Invalid Student ID or Password.";
                     }
-                    exit();
                 } else {
                     // Increment the login attempts on failed login
                     if (!isset($_SESSION['login_attempts'])) {
@@ -72,18 +128,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     $_SESSION['last_attempt'] = time();
                     $error = "Invalid Student ID or Password.";
                 }
-            } else {
-                // Increment the login attempts on failed login
-                if (!isset($_SESSION['login_attempts'])) {
-                    $_SESSION['login_attempts'] = 1;
-                } else {
-                    $_SESSION['login_attempts']++;
-                }
-                $_SESSION['last_attempt'] = time();
-                $error = "Invalid Student ID or Password.";
+            } catch (PDOException $e) {
+                $error = "Database error: Please try again later.";
             }
-        } catch (PDOException $e) {
-            $error = "Database error: Please try again later.";
         }
     }
 }
@@ -96,6 +143,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Student Portal - EduVote</title>
+    <script src="https://www.google.com/recaptcha/api.js?render=6LfLcC0rAAAAAG3ZmASAUwWVyYf4dY4GBNmZRZFj"></script>
     <style>
         * {
             margin: 0;
@@ -287,7 +335,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 <?php if (!empty($error)): ?>
                     <p style="color: red; text-align: center;"><?php echo htmlspecialchars($error); ?></p>
                 <?php endif; ?>
-                <form method="post" action="login.php">
+                <form method="post" action="login.php" id="loginForm">
+                   <!-- CSRFToken hidden word -->
+    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
+ 
                     <div class="form-group">
                         <label for="student-id">Student ID</label>
                         <input type="text" id="student-id" name="student_id" required placeholder="Enter your student ID"
@@ -317,6 +368,21 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     </footer>
 
     <script>
+        document.getElementById('loginForm').addEventListener('submit', function (e) {
+            e.preventDefault();
+            grecaptcha.ready(function () {
+                grecaptcha.execute('6LfLcC0rAAAAAG3ZmASAUwWVyYf4dY4GBNmZRZFj', {action: 'login'}).then(function (token) {
+                    var form = document.getElementById('loginForm');
+                    var input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.name = 'g-recaptcha-response';
+                    input.value = token;
+                    form.appendChild(input);
+                    form.submit();
+                });
+            });
+        });
+
         function showLogin() {
             document.getElementById('login-form').classList.remove('hidden');
             // Add code to hide registration form if it exists
