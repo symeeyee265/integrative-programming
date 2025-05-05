@@ -8,6 +8,7 @@ $success = '';
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $student_id = $_POST['student_id'];
     $email = $_POST['email'];
+    $security_answer = trim($_POST['security_answer']);
     $new_password = $_POST['new_password'];
     $confirm_password = $_POST['confirm_password'];
 
@@ -21,16 +22,26 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $user = $stmt->fetch();
 
         if ($user) {
-            // Update password
-            $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
-            $update_stmt = $conn->prepare("UPDATE users SET password = ? WHERE student_id = ?");
-            $update_stmt->execute([$hashed_password, $student_id]);
-            $success = "Password updated successfully!";
+            // Verify security answer
+            if ($security_answer !== $user['security_answer']) {
+                $error = "Invalid security answer.";
+            } else {
+                // Update password
+                $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
+                $update_stmt = $conn->prepare("UPDATE users SET password = ? WHERE student_id = ?");
+                $update_stmt->execute([$hashed_password, $student_id]);
+
+                // Set session flag and redirect
+                $_SESSION['reset_success'] = true;
+                header("Location: login.php");
+                exit(); // Important to prevent further execution
+            }
         } else {
             $error = "Invalid Student ID or Email.";
         }
     }
 }
+
 ?>
 
 <!DOCTYPE html>
@@ -212,7 +223,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                         <label for="email">Registered Email</label>
                         <input type="email" id="email" name="email" required>
                     </div>
-
+                    
+                    <div class="form-group">
+    <label for="security-answer">Security Answer</label>
+    <input type="text" id="security-answer" name="security_answer" required>
+</div>
                     <div class="form-group">
                         <label for="new-password">New Password</label>
                         <input type="password" id="new-password" name="new_password" required minlength="8">
