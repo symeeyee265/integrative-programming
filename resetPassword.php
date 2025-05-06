@@ -132,6 +132,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                         $_SESSION['reset_success'] = true;
                         $_SESSION['reset_attempts'] = 0;
                         $_SESSION['reset_last_attempt'] = time();
+                        $_SESSION['welcome_message'] = "Password reset successful! Please log in with your new password.";
                         header("Location: login.php");
                         exit(); // Important to prevent further execution
                     }
@@ -361,7 +362,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     
                     <div class="form-group">
                         <label for="security-answer">Security Answer</label>
-                        <input type="text" id="security-answer" name="security_answer" required>
+                        <input type="text" id="security-answer" name="security_answer" required 
+                               oninput="convertToLowercase(this)">
                     </div>
                     <div class="form-group">
                         <label for="new-password">New Password</label>
@@ -389,11 +391,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             <?php endif; ?>
         </div>
     </div>
-
-    <footer>
-        <p>&copy; 2025 EduVote - Campus Voting System</p>
-        <p>Contact: <a href="mailto:support@eduvote.edu" style="color: white;">support@eduvote.edu</a></p>
-    </footer>
 
     <script>
     // Student ID validation: exactly 10 chars, 3 letters, 7 numbers, no special chars
@@ -488,6 +485,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         } else {
             input.type = 'password';
         }
+    }
+
+    // Convert security answer to lowercase
+    function convertToLowercase(input) {
+        input.value = input.value.toLowerCase();
     }
     </script>
 </body>
