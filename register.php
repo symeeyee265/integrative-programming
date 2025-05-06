@@ -1,34 +1,23 @@
+<!--name : sok yee-->
+
+
 <?php
 session_start();
-require_once __DIR__ . '/dbConnection.php';
-require_once __DIR__ . '/emailService.php';
-require_once __DIR__ . '/oauth.php';
-require_once __DIR__ . '/eligibilityCheck.php';
-
-$errors = [];
-$success = false;
-
-// Initialize services
-$emailService = new EmailService($conn);
-$oauthService = new OAuthService($conn);
-$eligibilityService = new EligibilityService($conn);
+require_once 'dbConnection.php';
 
 // --- Strategy Pattern Classes ---
 interface ValidationStrategy {
-
-    public function validate($value): ?string;
+    public function validate($value):?string;
 }
 
 class RequiredValidation implements ValidationStrategy {
-
-    public function validate($value): ?string {
-        return empty(trim($value)) ? "This field is required." : null;
+    public function validate($value):?string {
+        return empty(trim($value))? "This field is required." : null;
     }
 }
 
 class PasswordStrengthValidation implements ValidationStrategy {
-
-    public function validate($value): ?string {
+    public function validate($value):?string {
         if (strlen($value) < 8)
             return "Password must be at least 8 characters.";
         if (!preg_match('/[A-Z]/', $value))
@@ -44,43 +33,70 @@ class PasswordStrengthValidation implements ValidationStrategy {
 }
 
 class EmailValidation implements ValidationStrategy {
-
-    public function validate($value): ?string {
-        if (!filter_var($value, FILTER_VALIDATE_EMAIL) || !preg_match('/@student\.tarc\.edu\.my$/', $value)) {
-            return "Invalid email format. Email must be a valid format and end with @student.tarc.edu.my.";
+    public function validate($value):?string {
+        if (!filter_var($value, FILTER_VALIDATE_EMAIL) || !preg_match('/^[a-zA-Z0-9]+@student\.tarc\.edu\.my$/', $value)) {
+            return "Email must be a valid format and end with @student.tarc.edu.my. No special characters allowed except @ and .";
         }
         return null;
     }
 }
 
+class FullNameValidation implements ValidationStrategy {
+    public function validate($value):?string {
+        if (strlen($value) > 20) {
+            return "Full name must not exceed 20 characters.";
+        }
+        if (!preg_match('/^[a-zA-Z\s]+$/', $value)) {
+            return "Full name can only contain letters and spaces.";
+        }
+        return null;
+    }
+}
+
+class StudentIdValidation implements ValidationStrategy {
+    public function validate($value):?string {
+        if (strlen($value) !== 10) {
+            return "Student ID must be exactly 10 characters.";
+        }
+        if (!preg_match('/^[A-Z]{3}[0-9]{7}$/', $value)) {
+            return "Student ID must be in format: 3 letters followed by 7 numbers (e.g., 23WMR10564).";
+        }
+        return null;
+    }
+}
 
 class SecurityAnswerValidation implements ValidationStrategy {
-
-    public function validate($value): ?string {
-        // Reject any special characters (only allow a-z, A-Z, 0-9)
-        return preg_match('/[^a-zA-Z0-9]/', $value) ? "Special characters are not allowed." : null;
+    public function validate($value):?string {
+        if (!preg_match('/^[a-z0-9\s]+$/', $value)) {
+            return "Security answer can only contain lowercase letters, numbers, and spaces.";
+        }
+        return null;
     }
 }
 
 class PasswordStrengthStrategy implements ValidationStrategy {
-    public function validate($value): ?string {
-        // This method can return null, but let's add a getStrength method for the meter
+    public function validate($value):?string {
         return null;
     }
+
     public function getStrength($value): int {
         $strength = 0;
-        if (strlen($value) >= 8) $strength++;
-        if (preg_match('/[A-Z]/', $value)) $strength++;
-        if (preg_match('/[a-z]/', $value)) $strength++;
-        if (preg_match('/[0-9]/', $value)) $strength++;
-        if (preg_match('/[^a-zA-Z0-9]/', $value)) $strength++;
-        return $strength; // 0-5
+        if (strlen($value) >= 8)
+            $strength++;
+        if (preg_match('/[A-Z]/', $value))
+            $strength++;
+        if (preg_match('/[a-z]/', $value))
+            $strength++;
+        if (preg_match('/[0-9]/', $value))
+            $strength++;
+        if (preg_match('/[^a-zA-Z0-9]/', $value))
+            $strength++;
+        return $strength;
     }
 }
 
 class SecurityValidationStrategy implements ValidationStrategy {
-    public function validate($value): ?string {
-        // Simple checks for common XSS/SQLi patterns
+    public function validate($value):?string {
         if (preg_match('/<script|onerror|onload|<img|<svg|<iframe|<object|<embed|<a /i', $value)) {
             return "Input contains potential XSS attack patterns.";
         }
@@ -91,8 +107,17 @@ class SecurityValidationStrategy implements ValidationStrategy {
     }
 }
 
-class FieldValidator {
+class AddressValidation implements ValidationStrategy {
+    public function validate($value):?string {
+        $wordCount = str_word_count($value);
+        if ($wordCount > 50) {
+            return "Address must not exceed 50 words.";
+        }
+        return null;
+    }
+}
 
+class FieldValidator {
     private $strategies = [];
 
     public function addStrategy(ValidationStrategy $strategy) {
@@ -110,171 +135,124 @@ class FieldValidator {
     }
 }
 
-// Helper function to check for special characters (except space, dash, underscore)
+// Helper functions
 function has_special_char($str) {
     return preg_match('/[^a-zA-Z0-9 \-_]/', $str);
 }
 
-// Check if form is submitted
-if ($_SERVER["REQUEST_METHOD"] === "POST") {
-
-    // Ensure $email is set from POST data
-    $email = isset($_POST['email']) ? $_POST['email'] : '';
-}
-    // Helper function for email validation
 function is_valid_email($email) {
     return filter_var($email, FILTER_VALIDATE_EMAIL) && preg_match('/@student\.tarc\.edu\.my$/', $email);
 }
 
-// Helper: Only allow certain characters in email
 function sanitize_email($email) {
     return preg_replace('/[^a-zA-Z0-9@.]/', '', $email);
 }
 
-
-
-// Helper: Allow letters, numbers, spaces, commas, periods, and hyphens in addresses
 function sanitize_address($str) {
-    return preg_replace('/[^a-zA-Z0-9 ,.-]/', '', $str); // Added `-` (hyphen)
+    return preg_replace('/[^a-zA-Z0-9 ,.-]/', '', $str);
 }
 
-// New helper function (or modify has_special_char)
 function has_special_char_billing($str) {
-    return preg_match('/[^a-zA-Z0-9 ,.-]/', $str); // Allow , . -
+    return preg_match('/[^a-zA-Z0-9 ,.-]/', $str);
 }
+
+// Helper functions for sanitization
+function sanitizeInput($input) {
+    // Remove all special characters except letters, numbers, and spaces
+    return preg_replace('/[^a-zA-Z0-9\s]/', '', $input);
+}
+
+function sanitizeEmail($email) {
+    // Only allow letters, numbers, @, and . for email
+    return preg_replace('/[^a-zA-Z0-9@.]/', '', $email);
+}
+
+function sanitizeAddress($address) {
+    // Allow letters, numbers, spaces, commas, periods, and hyphens for addresses
+    return preg_replace('/[^a-zA-Z0-9\s,.-]/', '', $address);
+}
+
+$errors = [];
+$success = false;
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    // Ensure $email is set from POST data
-    $email = isset($_POST['email']) ? $_POST['email'] : '';
-
-//    // Helper function for email validation
-//    function is_valid_email($email) {
-//        return filter_var($email, FILTER_VALIDATE_EMAIL) && preg_match('/@student\.tarc\.edu\.my$/', $email);
-//    }
-
-//    // Helper: Only allow certain characters in email
-//    function sanitize_email($email) {
-//        return preg_replace('/[^a-zA-Z0-9@.]/', '', $email);
-//    }
-
-//    // Helper: Allow letters, numbers, spaces, commas, periods, and hyphens in addresses
-//    function sanitize_address($str) {
-//        return preg_replace('/[^a-zA-Z0-9 ,.-]/', '', $str); // Added `-` (hyphen)
-//    }
-//
-//    // New helper function (or modify has_special_char)
-//    function has_special_char_billing($str) {
-//        return preg_match('/[^a-zA-Z0-9 ,.-]/', $str); // Allow , . -
-//    }
-
     // Get and sanitize input data
-    $full_name = htmlspecialchars(trim($_POST['full_name']), ENT_QUOTES, 'UTF-8');
-    $full_name = preg_replace('/[^a-zA-Z ]/', '', $full_name);
-    $full_name = strtoupper($full_name);
-    $student_id = htmlspecialchars(trim($_POST['student_id']), ENT_QUOTES, 'UTF-8');
-    $email = sanitize_email(trim($_POST['email']));
-    $program = htmlspecialchars(trim($_POST['program']), ENT_QUOTES, 'UTF-8');
-    $password = $_POST['password']; // Don't sanitize password
-    $confirm_password = $_POST['confirm_password'];
-    $date_of_birth = htmlspecialchars(trim($_POST['date_of_birth']), ENT_QUOTES, 'UTF-8');
-    $student_status = htmlspecialchars(trim($_POST['student_status']), ENT_QUOTES, 'UTF-8');
-    $billing_address = sanitize_address(trim($_POST['billing_address']));
-    $current_address = sanitize_address(trim($_POST['current_address']));
-    $recaptcha_response = $_POST['g-recaptcha-response'] ?? '';
+    $full_name = strtoupper(sanitizeInput(trim($_POST['full_name'])));
+    $student_id = strtoupper(sanitizeInput(trim($_POST['student_id'])));
+    $email = strtolower(sanitizeEmail(trim($_POST['email'])));
+    $program = sanitizeInput(trim($_POST['program']));
+    $security_question = sanitizeInput(trim($_POST['security_question']));
+    $security_answer = strtolower(sanitizeInput(trim($_POST['security_answer'])));
+    $billing_address = sanitizeAddress(trim($_POST['billing_address']));
+    $current_address = sanitizeAddress(trim($_POST['current_address']));
+    $password = $_POST['password']; // No sanitization for password
+    $confirm_password = $_POST['confirm_password']; // No sanitization for password
 
-    // Length restrictions
-    if (strlen($full_name) > 100)
-        $errors[] = "Full name too long.";
-    if (strlen($student_id) > 20)
-        $errors[] = "Student ID too long.";
-    if (strlen($student_id) !== 10)
-        $errors[] = "Student ID must be exactly 10 characters.";
-    if (strlen($email) > 100)
-        $errors[] = "Email too long.";
-    if (strlen($program) > 50)
-        $errors[] = "Program too long.";
-    if (strlen($billing_address) > 255)
-        $errors[] = "Billing address too long.";
-    if (strlen($current_address) > 255)
-        $errors[] = "Current address too long.";
+    // Initialize validators
+    $nameValidator = new FieldValidator();
+    $nameValidator->addStrategy(new RequiredValidation());
+    $nameValidator->addStrategy(new FullNameValidation());
+    $nameValidator->addStrategy(new SecurityValidationStrategy());
 
-    // Special character validation
-    if (has_special_char($full_name))
-        $errors[] = "Please don't put special character in Full Name.";
-    if (has_special_char($student_id))
-        $errors[] = "Please don't put special character in Student ID.";
-    if (has_special_char($program))
-        $errors[] = "Please don't put special character in Program.";
-    if (has_special_char($student_status))
-        $errors[] = "Please don't put special character in Student Status.";
+    $studentIdValidator = new FieldValidator();
+    $studentIdValidator->addStrategy(new RequiredValidation());
+    $studentIdValidator->addStrategy(new StudentIdValidation());
+    $studentIdValidator->addStrategy(new SecurityValidationStrategy());
 
-    // Email validation
-    if (!is_valid_email($email))
-        $errors[] = "Please enter a valid TARC student email address ending with @student.tarc.edu.my.";
+    $emailValidator = new FieldValidator();
+    $emailValidator->addStrategy(new RequiredValidation());
+    $emailValidator->addStrategy(new EmailValidation());
+    $emailValidator->addStrategy(new SecurityValidationStrategy());
 
-    // Password validation (example: at least 8 chars, upper, lower, number, symbol)
-    if (strlen($password) < 8 ||
-            !preg_match('/[A-Z]/', $password) ||
-            !preg_match('/[a-z]/', $password) ||
-            !preg_match('/[0-9]/', $password) ||
-            !preg_match('/[^a-zA-Z0-9]/', $password)) {
-        $errors[] = "Password must be at least 8 characters and include uppercase, lowercase, number, and symbol.";
-    }
-    if ($password !== $confirm_password)
-        $errors[] = "Passwords do not match.";
+    $passwordValidator = new FieldValidator();
+    $passwordValidator->addStrategy(new RequiredValidation());
+    $passwordValidator->addStrategy(new PasswordStrengthValidation());
+    $passwordValidator->addStrategy(new SecurityValidationStrategy());
 
-    // Required fields
-    if (empty($full_name))
-        $errors[] = "Full name is required.";
-    if (empty($student_id))
-        $errors[] = "Student ID is required.";
-    if (empty($email))
-        $errors[] = "Email is required.";
-    if (empty($program))
+    $securityAnswerValidator = new FieldValidator();
+    $securityAnswerValidator->addStrategy(new RequiredValidation());
+    $securityAnswerValidator->addStrategy(new SecurityAnswerValidation());
+    $securityAnswerValidator->addStrategy(new SecurityValidationStrategy());
+
+    $addressValidator = new FieldValidator();
+    $addressValidator->addStrategy(new RequiredValidation());
+    $addressValidator->addStrategy(new AddressValidation());
+    $addressValidator->addStrategy(new SecurityValidationStrategy());
+
+    // Validate inputs
+    $errors = array_merge(
+        $nameValidator->validate($full_name),
+        $studentIdValidator->validate($student_id),
+        $emailValidator->validate($email),
+        $passwordValidator->validate($password),
+        $securityAnswerValidator->validate($security_answer),
+        $addressValidator->validate($billing_address),
+        $addressValidator->validate($current_address)
+    );
+
+    // Validate program
+    if (empty($program)) {
         $errors[] = "Program of study is required.";
-    if (empty($date_of_birth))
-        $errors[] = "Date of birth is required.";
-    if (empty($student_status))
-        $errors[] = "Student status is required.";
-    if (empty($billing_address))
-        $errors[] = "Billing address is required.";
-    if (empty($current_address))
-        $errors[] = "Current address is required.";
-
-    // Student ID must contain both letters and numbers
-    if (!preg_match('/[a-zA-Z]/', $student_id) || !preg_match('/[0-9]/', $student_id)) {
-        $errors[] = "Student ID must contain both letters and numbers, and need to have exactly 10 character.";
     }
 
-    // Verify reCAPTCHA v3
-    if (!empty($recaptcha_response)) {
-        $recaptcha_secret = '6LfLcC0rAAAAALHgWE2Vo4ogBMtPTomQ7w2mmi92';
-        $recaptcha_verify = file_get_contents("https://www.google.com/recaptcha/api/siteverify?secret={$recaptcha_secret}&response={$recaptcha_response}");
-        $recaptcha_data = json_decode($recaptcha_verify);
-        // Set a score threshold (0.5 in this example)
-        if (!$recaptcha_data->success || $recaptcha_data->score < 0.5) {
-            $errors[] = "reCAPTCHA verification failed.";
-        }
-    } else {
-        $errors[] = "Please complete the reCAPTCHA verification.";
+    // Validate security question
+    if (empty($security_question)) {
+        $errors[] = "Security question is required.";
     }
 
-    // Check eligibility
-    if (empty($errors)) {
-        $eligibility = $eligibilityService->tarcInstitutionAPI($date_of_birth);
-        if (!$eligibility['isEligible']) {
-            $errors = array_merge($errors, $eligibility['errors']);
-        }
+    // Validate password confirmation
+    if ($password !== $confirm_password) {
+        $errors[] = "Passwords do not match.";
     }
 
     // Check if student ID or email already exists
     if (empty($errors)) {
         try {
-            $stmt = $conn->prepare("SELECT user_id FROM users WHERE student_id =? OR email =?");
+            $stmt = $conn->prepare("SELECT student_id FROM users WHERE student_id = ? OR email = ?");
             $stmt->execute([$student_id, $email]);
-
+            
             if ($stmt->rowCount() > 0) {
-                $errors[] = "Student ID or email already registered Please go to Login Page.";
+                $errors[] = "Student ID or email already registered.";
             }
         } catch (PDOException $e) {
             $errors[] = "Database error. Please try again later.";
@@ -286,641 +264,574 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         try {
             $hashed_password = password_hash($password, PASSWORD_DEFAULT);
             $is_admin = 0; // New users are not admins by default
-
-            $stmt = $conn->prepare("
-                INSERT INTO users (
-                    student_id, password, full_name, email, program, is_admin,
-                    date_of_birth, student_status, billing_address, current_address
-                ) VALUES (?,?,?,?,?,?,?,?,?,?)
-            ");
+            
+            $stmt = $conn->prepare("INSERT INTO users (student_id, password, full_name, email, program, security_question, security_answer, billing_address, current_address, is_admin) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
             $stmt->execute([
-                $student_id, $hashed_password, $full_name, $email, $program, $is_admin,
-                $date_of_birth, $student_status, $billing_address, $current_address
+                $student_id, 
+                $hashed_password, 
+                $full_name, 
+                $email, 
+                $program,
+                $security_question,
+                $security_answer,
+                $billing_address,
+                $current_address,
+                $is_admin
             ]);
-
-            $userId = $conn->lastInsertId();
-
-            // Generate and send verification email
-            $token = $emailService->generateVerificationToken($userId);
-            if ($token) {
-                $emailService->sendVerificationEmail($email, $full_name, $token);
-            }
-
+            
             $success = true;
         } catch (PDOException $e) {
             $errors[] = "Registration failed. Please try again.";
         }
     }
-
-    $fieldValidator = new FieldValidator();
-    $fieldValidator->addStrategy(new RequiredValidation());
-    $fieldValidator->addStrategy(new SecurityValidationStrategy());
-    $fieldValidator->addStrategy(new SecurityAnswerValidation());
-    $securityAnswerErrors = $fieldValidator->validate($_POST['security_answer']);
-
-    if (has_special_char_billing($billing_address)) {
-        $errors[] = "Billing address contains invalid characters. Allowed: letters, numbers, spaces, commas, periods, hyphens.";
-    }
 }
 
+// Redirect to login page if registration was successful
 if ($success) {
-    echo "<!DOCTYPE html><html lang='en'><head><meta charset='UTF-8'><meta http-equiv='refresh' content='3;url=login.php'><title>Registration Success</title><style>body{font-family:sans-serif;background:#f5f7fa;display:flex;align-items:center;justify-content:center;height:100vh;} .success-box{background:#fff;padding:2rem 3rem;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,0.1);text-align:center;} .success-box h1{color:#27ae60;} </style></head><body><div class='success-box'><h1>You've signed up successfully.</h1><p>Redirecting to login page...</p></div></body></html>";
+    header("Location: login.php?registration=success");
     exit();
 }
-
 ?>
+
 <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student Registration - EduVote</title>
+    <style>
+        /* Reuse the same styles from login.php for consistency */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Roboto, sans-serif;
+        }
 
+        body {
+            background-color: #f5f7fa;
+            color: #2c3e50;
+            line-height: 1.6;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
 
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Student Registration - EduVote</title>
-        <script src="https://www.google.com/recaptcha/api.js?render=6LfLcC0rAAAAAG3ZmASAUwWVyYf4dY4GBNmZRZFj"></script>
-        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
-        <style>
-            /* Reuse the same styles from login.php for consistency */
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-                font-family: 'Segoe UI', Roboto, sans-serif;
+        header {
+            background-color: #1a5276;
+            color: white;
+            padding: 1rem;
+            text-align: center;
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+
+        .logo span {
+            color: #3498db;
+        }
+
+        nav {
+            margin-top: 1rem;
+        }
+
+        nav a {
+            color: white;
+            text-decoration: none;
+            margin: 0 10px;
+            font-weight: 500;
+        }
+
+        .auth-container {
+            max-width: 800px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+            flex: 1;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 2rem;
+            justify-content: center;
+        }
+
+        .auth-box {
+            background: white;
+            border-radius: 8px;
+            padding: 2rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 400px;
+        }
+
+        .auth-box h1 {
+            text-align: center;
+            color: #1a5276;
+            margin-bottom: 1.5rem;
+            font-size: 1.5rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+        }
+
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 0.8rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 1rem;
+        }
+
+        .btn {
+            display: block;
+            width: 100%;
+            padding: 0.8rem;
+            background: #2980b9;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            margin-top: 1rem;
+        }
+
+        .btn:hover {
+            background: #2471a3;
+        }
+
+        .auth-links {
+            margin-top: 1.5rem;
+            text-align: center;
+        }
+
+        .auth-links a {
+            color: #2980b9;
+            text-decoration: none;
+            display: block;
+            margin-bottom: 0.5rem;
+        }
+
+        footer {
+            background: #1a5276;
+            color: white;
+            text-align: center;
+            padding: 1.5rem;
+            margin-top: auto;
+        }
+
+        .error {
+            color: red;
+            text-align: center;
+            margin-bottom: 1rem;
+        }
+
+        /* Password strength meter styles */
+        .strength-meter {
+            height: 5px;
+            background-color: #eee;
+            margin-top: 10px;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .strength-meter-bar {
+            height: 100%;
+            width: 0;
+            transition: width 0.3s ease;
+        }
+
+        .strength-weak {
+            background-color: #dc3545;
+        }
+
+        .strength-medium {
+            background-color: #ffc107;
+        }
+
+        .strength-strong {
+            background-color: #28a745;
+        }
+
+        .feedback {
+            display: block;
+            margin-top: 5px;
+            font-size: 0.875rem;
+        }
+
+        .form-group {
+            position: relative;
+        }
+
+        .password-toggle {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: #666;
+        }
+
+        .password-toggle:hover {
+            color: #333;
+        }
+
+        /* Form input styles */
+        .form-input {
+            padding: 10px;
+            border: 2px solid #ccc;
+            border-radius: 4px;
+            width: 200px;
+        }
+
+        /* Address textarea specific styles */
+        textarea.form-input {
+            width: 100%;
+            min-height: 100px;
+            resize: vertical;
+        }
+
+        /* Valid input (green background and border) */
+        .valid {
+            background-color: #d4edda;
+            border-color: #28a745;
+        }
+
+        /* Invalid input (red background and border) */
+        .invalid {
+            background-color: #f8d7da;
+            border-color: #dc3545;
+        }
+    </style>
+    <script>
+        // Sanitization functions for client-side
+        function sanitizeInput(value) {
+            // Remove all special characters except letters, numbers, and spaces
+            return value.replace(/[^a-zA-Z0-9\s]/g, '');
+        }
+
+        function sanitizeEmail(value) {
+            // Only allow letters, numbers, @, and . for email
+            return value.replace(/[^a-zA-Z0-9@.]/g, '');
+        }
+
+        function sanitizeAddress(value) {
+            // Allow letters, numbers, spaces, commas, periods, and hyphens for addresses
+            return value.replace(/[^a-zA-Z0-9\s,.-]/g, '');
+        }
+
+        // General input validation function
+        function validateInput(input, fieldName) {
+            const feedback = document.getElementById(`${fieldName}_feedback`);
+            let value = input.value;
+            let errorMessage = '';
+
+            // Apply sanitization based on field type
+            if (fieldName === 'email') {
+                value = sanitizeEmail(value.toLowerCase());
+            } else if (fieldName === 'billing_address' || fieldName === 'current_address') {
+                value = sanitizeAddress(value);
+            } else if (fieldName !== 'password' && fieldName !== 'confirm_password') {
+                value = sanitizeInput(value);
             }
 
-            body {
-                background-color: #f5f7fa;
-                color: #2c3e50;
-                line-height: 1.6;
-                display: flex;
-                flex-direction: column;
-                min-height: 100vh;
+            // Update input value with sanitized version
+            if (fieldName !== 'password' && fieldName !== 'confirm_password') {
+                input.value = value;
             }
 
-            header {
-                background-color: #1a5276;
-                color: white;
-                padding: 1rem;
-                text-align: center;
+            if (input.tagName === 'SELECT' && value === '') {
+                errorMessage = 'This field is required.';
+            } else if (input.type === 'text' || input.type === 'textarea') {
+                if (value === '') {
+                    errorMessage = 'This field is required.';
+                } else if (fieldName === 'full_name') {
+                    value = value.toUpperCase();
+                    input.value = value;
+                    if (value.length > 20) {
+                        errorMessage = 'Full name must not exceed 20 characters.';
+                    } else if (!/^[A-Z\s]+$/.test(value)) {
+                        errorMessage = 'Full name can only contain letters and spaces.';
+                    }
+                } else if (fieldName === 'student_id') {
+                    // Limit to 10 characters
+                    if (value.length > 10) {
+                        value = value.slice(0, 10);
+                        input.value = value;
+                    }
+                    value = value.toUpperCase();
+                    input.value = value;
+                    if (value.length !== 10) {
+                        errorMessage = 'Student ID must be exactly 10 characters.';
+                    } else if (!/^[A-Z]{3}[0-9]{7}$/.test(value)) {
+                        errorMessage = 'Student ID must be in format: 3 letters followed by 7 numbers (e.g., 23WMR10564).';
+                    }
+                } else if (fieldName === 'email') {
+                    if (!/^[a-zA-Z0-9]+@student\.tarc\.edu\.my$/.test(value)) {
+                        errorMessage = 'Email must end with @student.tarc.edu.my. No special characters allowed except @ and .';
+                    }
+                } else if (fieldName === 'security_answer') {
+                    value = value.toLowerCase();
+                    input.value = value;
+                    if (!/^[a-z0-9\s]+$/.test(value)) {
+                        errorMessage = 'Security answer can only contain lowercase letters, numbers, and spaces.';
+                    }
+                } else if (fieldName === 'billing_address' || fieldName === 'current_address') {
+                    const wordCount = value.trim().split(/\s+/).length;
+                    if (wordCount > 50) {
+                        errorMessage = 'Address must not exceed 50 words.';
+                    }
+                }
             }
 
-            .logo {
-                font-size: 1.5rem;
-                font-weight: bold;
-                margin-bottom: 0.5rem;
+            if (errorMessage) {
+                feedback.textContent = `⚠️ ${errorMessage}`;
+                input.classList.add('invalid');
+                input.classList.remove('valid');
+            } else {
+                feedback.textContent = '';
+                input.classList.add('valid');
+                input.classList.remove('invalid');
+            }
+        }
+
+        // Password validation
+        function validatePassword() {
+            const password = document.getElementById('password');
+            const passwordFeedback = document.getElementById('password_feedback');
+            const val = password.value;
+            let strength = 0;
+            if (val.length >= 8)
+                strength++;
+            if (/[A-Z]/.test(val))
+                strength++;
+            if (/[a-z]/.test(val))
+                strength++;
+            if (/[0-9]/.test(val))
+                strength++;
+            if (/[^a-zA-Z0-9]/.test(val))
+                strength++;
+
+            let errorMessage = '';
+            if (val.length < 8) {
+                errorMessage = 'Password must be at least 8 characters.';
+            } else if (!/[A-Z]/.test(val)) {
+                errorMessage = 'Include an uppercase letter.';
+            } else if (!/[a-z]/.test(val)) {
+                errorMessage = 'Include a lowercase letter.';
+            } else if (!/[0-9]/.test(val)) {
+                errorMessage = 'Include a number.';
+            } else if (!/[^a-zA-Z0-9]/.test(val)) {
+                errorMessage = 'Include a symbol.';
             }
 
-            .logo span {
-                color: #3498db;
+            if (errorMessage) {
+                passwordFeedback.textContent = `⚠️ ${errorMessage}`;
+                password.classList.add('invalid');
+                password.classList.remove('valid');
+            } else {
+                passwordFeedback.textContent = '';
+                password.classList.add('valid');
+                password.classList.remove('invalid');
             }
 
-            nav {
-                margin-top: 1rem;
+            updateStrengthMeter();
+        }
+
+        // Confirm password validation
+        function validateConfirmPassword() {
+            const password = document.getElementById('password');
+            const confirmPassword = document.getElementById('confirm-password');
+            const confirmPasswordFeedback = document.getElementById('confirm_password_feedback');
+            if (confirmPassword.value !== password.value) {
+                confirmPasswordFeedback.textContent = '⚠️ Passwords do not match.';
+                confirmPassword.classList.add('invalid');
+                confirmPassword.classList.remove('valid');
+            } else {
+                confirmPasswordFeedback.textContent = '';
+                confirmPassword.classList.add('valid');
+                confirmPassword.classList.remove('invalid');
             }
+        }
 
-            nav a {
-                color: white;
-                text-decoration: none;
-                margin: 0 10px;
-                font-weight: 500;
+        function updateStrengthMeter() {
+            const password = document.getElementById('password').value;
+            let strength = 0;
+            if (password.length >= 8) strength++;
+            if (/[A-Z]/.test(password)) strength++;
+            if (/[a-z]/.test(password)) strength++;
+            if (/[0-9]/.test(password)) strength++;
+            if (/[^a-zA-Z0-9]/.test(password)) strength++;
+            
+            const meter = document.getElementById('strengthMeterBar');
+            meter.style.width = (strength * 20) + '%';
+            meter.className = 'strength-meter-bar ' +
+                (strength <= 2 ? 'strength-weak' : strength <= 4 ? 'strength-medium' : 'strength-strong');
+        }
+
+        // Password show/hide
+        function togglePasswordVisibility(fieldId) {
+            const input = document.getElementById(fieldId);
+            const button = input.nextElementSibling;
+            if (input.type === 'password') {
+                input.type = 'text';
+                button.textContent = 'Hide';
+            } else {
+                input.type = 'password';
+                button.textContent = 'Show';
             }
+        }
+    </script>
+</head>
+<body>
+    <header>
+        <div class="logo">Edu<span>Vote</span></div>
+        <nav>
+            <a href="homePage.php">Home</a>
+            <a href="login.php">Login</a>
+        </nav>
+    </header>
 
-            .auth-container {
-                max-width: 800px;
-                margin: 2rem auto;
-                padding: 0 1rem;
-                flex: 1;
-                display: flex;
-                flex-wrap: wrap;
-                gap: 2rem;
-                justify-content: center;
-            }
+    <div class="auth-container">
+        <div class="auth-box">
+            <h1>Student Registration</h1>
 
-            .auth-box {
-                background: white;
-                border-radius: 8px;
-                padding: 2rem;
-                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-                width: 100%;
-                max-width: 400px;
-            }
+            <?php if (!empty($errors)): ?>
+                <div class="error">
+                    <?php foreach ($errors as $error): ?>
+                        <p><?= htmlspecialchars($error) ?></p>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
 
-            .auth-box h1 {
-                text-align: center;
-                color: #1a5276;
-                margin-bottom: 1.5rem;
-                font-size: 1.5rem;
-            }
+            <form action="register.php" method="post" onsubmit="return validateForm()">
+                <div class="form-group">
+                    <label for="full-name">Full Name</label>
+                    <input type="text" id="full-name" name="full_name" class="form-input" required 
+                           value="<?= isset($_POST['full_name']) ? htmlspecialchars($_POST['full_name']) : '' ?>" 
+                           placeholder="As it appears on school records"
+                           oninput="validateInput(this, 'full_name')">
+                    <span class="feedback" id="full_name_feedback"></span>
+                </div>
 
-            .form-group {
-                margin-bottom: 1.5rem;
-            }
+                <div class="form-group">
+                    <label for="reg-student-id">Student ID</label>
+                    <input type="text" id="reg-student-id" name="student_id" class="form-input" required 
+                           value="<?= isset($_POST['student_id']) ? htmlspecialchars($_POST['student_id']) : '' ?>" 
+                           placeholder="Your official student ID"
+                           oninput="validateInput(this, 'student_id')">
+                    <span class="feedback" id="student_id_feedback"></span>
+                </div>
 
-            .form-group label {
-                display: block;
-                margin-bottom: 0.5rem;
-                font-weight: 500;
-            }
+                <div class="form-group">
+                    <label for="email">Institutional Email</label>
+                    <input type="email" id="email" name="email" class="form-input" required 
+                           value="<?= isset($_POST['email']) ? htmlspecialchars($_POST['email']) : '' ?>" 
+                           placeholder="your.id@student.tarc.edu.my"
+                           oninput="validateInput(this, 'email')">
+                    <span class="feedback" id="email_feedback"></span>
+                </div>
 
-            .form-group label.required::after {
-                content: '*';
-                color: red;
-                margin-left: 3px;
-            }
+                <div class="form-group">
+                    <label for="program">Program of Study</label>
+                    <select id="program" name="program" class="form-input" required
+                            onchange="validateInput(this, 'program')">
+                        <option value="">Select your program</option>
+                        <option value="Computer Science" <?= (isset($_POST['program']) && $_POST['program'] === 'Computer Science') ? 'selected' : '' ?>>Computer Science</option>
+                        <option value="Engineering" <?= (isset($_POST['program']) && $_POST['program'] === 'Engineering') ? 'selected' : '' ?>>Engineering</option>
+                        <option value="Business" <?= (isset($_POST['program']) && $_POST['program'] === 'Business') ? 'selected' : '' ?>>Business</option>
+                        <option value="Arts & Humanities" <?= (isset($_POST['program']) && $_POST['program'] === 'Arts & Humanities') ? 'selected' : '' ?>>Arts & Humanities</option>
+                        <option value="Natural Sciences" <?= (isset($_POST['program']) && $_POST['program'] === 'Natural Sciences') ? 'selected' : '' ?>>Natural Sciences</option>
+                        <option value="Other" <?= (isset($_POST['program']) && $_POST['program'] === 'Other') ? 'selected' : '' ?>>Other</option>
+                    </select>
+                    <span class="feedback" id="program_feedback"></span>
+                </div>
 
-            .form-group input,
-            .form-group select {
-                width: 100%;
-                padding: 0.8rem;
-                border: 1px solid #ddd;
-                border-radius: 4px;
-                font-size: 1rem;
-            }
+                <div class="form-group">
+                    <label for="security-question">Security Question</label>
+                    <select id="security-question" name="security_question" class="form-input" required
+                            onchange="validateInput(this, 'security_question')">
+                        <option value="">Select a question</option>
+                        <option value="What is your mother's maiden name?" <?= (isset($_POST['security_question']) && $_POST['security_question'] === 'What is your mother\'s maiden name?') ? 'selected' : '' ?>>What is your mother's maiden name?</option>
+                        <option value="What was your first pet's name?" <?= (isset($_POST['security_question']) && $_POST['security_question'] === 'What was your first pet\'s name?') ? 'selected' : '' ?>>What was your first pet's name?</option>
+                        <option value="What is your favorite book?" <?= (isset($_POST['security_question']) && $_POST['security_question'] === 'What is your favorite book?') ? 'selected' : '' ?>>What is your favorite book?</option>
+                        <option value="What city were you born in?" <?= (isset($_POST['security_question']) && $_POST['security_question'] === 'What city were you born in?') ? 'selected' : '' ?>>What city were you born in?</option>
+                    </select>
+                    <span class="feedback" id="security_question_feedback"></span>
+                </div>
 
-            .form-group textarea {
-                width: 100%;
-                padding: 0.8rem;
-                border: 1px solid #ddd;
-                border-radius: 4px;
-                font-size: 1rem;
-                height: 100px; /* Increase the height of textareas */
-            }
+                <div class="form-group">
+                    <label for="security-answer">Security Answer</label>
+                    <input type="text" id="security-answer" name="security_answer" class="form-input" 
+                           maxlength="255" required
+                           value="<?= isset($_POST['security_answer']) ? htmlspecialchars($_POST['security_answer']) : '' ?>"
+                           oninput="validateInput(this, 'security_answer')">
+                    <span class="feedback" id="security_answer_feedback"></span>
+                </div>
 
-            .btn {
-                display: block;
-                width: 100%;
-                padding: 0.8rem;
-                background: #2980b9;
-                color: white;
-                border: none;
-                border-radius: 4px;
-                font-size: 1rem;
-                font-weight: 500;
-                cursor: pointer;
-                margin-top: 1rem;
-            }
+                <div class="form-group">
+                    <label for="billing-address">Billing Address</label>
+                    <textarea id="billing-address" name="billing_address" class="form-input" 
+                              maxlength="255" required
+                              oninput="validateInput(this, 'billing_address')"
+                              placeholder="Enter your billing address"
+                              rows="4"><?= isset($_POST['billing_address']) ? htmlspecialchars($_POST['billing_address']) : '' ?></textarea>
+                    <span class="feedback" id="billing_address_feedback"></span>
+                </div>
 
-            .btn:hover {
-                background: #2471a3;
-            }
+                <div class="form-group">
+                    <label for="current-address">Current Address</label>
+                    <textarea id="current-address" name="current_address" class="form-input" 
+                              maxlength="255" required
+                              oninput="validateInput(this, 'current_address')"
+                              placeholder="Enter your current address"
+                              rows="4"><?= isset($_POST['current_address']) ? htmlspecialchars($_POST['current_address']) : '' ?></textarea>
+                    <span class="feedback" id="current_address_feedback"></span>
+                </div>
 
-            .auth-links {
-                margin-top: 1.5rem;
-                text-align: center;
-            }
-
-            .auth-links a {
-                color: #2980b9;
-                text-decoration: none;
-                display: block;
-                margin-bottom: 0.5rem;
-            }
-
-            footer {
-                background: #1a5276;
-                color: white;
-                text-align: center;
-                padding: 1.5rem;
-                margin-top: auto;
-            }
-
-            .error {
-                color: red;
-                text-align: center;
-                margin-bottom: 1rem;
-            }
-
-            .social-login {
-                margin-top: 1rem;
-                text-align: center;
-            }
-
-            .social-login button {
-                margin: 0.5rem;
-                padding: 0.5rem 1rem;
-                border: none;
-                border-radius: 4px;
-                cursor: pointer;
-                font-weight: 500;
-            }
-
-            .google-btn {
-                background: #DB4437;
-                color: white;
-            }
-
-            .facebook-btn {
-                background: #4267B2;
-                color: white;
-            }
-
-            .eligibility-status {
-                margin: 1rem 0;
-                padding: 1rem;
-                border-radius: 4px;
-            }
-
-            .eligible {
-                background: #d4edda;
-                color: #155724;
-            }
-
-            .not-eligible {
-                background: #f8d7da;
-                color: #721c24;
-            }
-
-            .strength-meter {
-                height: 5px;
-                width: 100%;
-                background: #eee;
-                margin-top: 2px;
-            }
-
-            .strength-meter-bar {
-                height: 100%;
-                transition: width 0.3s;
-            }
-
-            .strength-weak {
-                background: #e74c3c;
-            }
-
-            .strength-medium {
-                background: #f1c40f;
-            }
-
-            .strength-strong {
-                background: #2ecc71;
-            }
-
-            .show-hide {
-                cursor: pointer;
-            }
-
-            .invalid {
-                border: 1px solid red;
-            }
-
-            .valid {
-                border: 1px solid green;
-            }
-
-            form {
-                width: 300px;
-                margin: 0 auto;
-            }
-
-            input {
-                width: 100%;
-                padding: 10px;
-                border: 2px solid #ccc;
-                border-radius: 5px;
-                margin-bottom: 10px;
-                font-size: 16px;
-            }
-
-            .error input {
-                border-color: red;
-            }
-
-            .success input {
-                border-color: green;
-            }
-
-            i {
-                position: absolute;
-                right: 10px;
-                top: 50%;
-                transform: translateY(-50%);
-                font-size: 20px;
-            }
-
-            .error i {
-                color: red;
-            }
-
-            .success i {
-                color: green;
-            }
-
-            p {
-                background-color: red;
-                color: white;
-                padding: 5px 10px;
-                border-radius: 5px;
-                margin: 0;
-                display: none;
-            }
-
-            .error p {
-                display: block;
-            }
-
-            /* Default input style */
-            .form-input {
-                padding: 10px;
-                border: 2px solid #ccc;
-                border-radius: 4px;
-                width: 200px;
-            }
-
-            /* Valid input (green background) */
-            .valid {
-                background-color: #d4edda;
-                border-color: #28a745;
-            }
-
-            /* Invalid input (red background) */
-            .invalid {
-                background-color: #f8d7da;
-                border-color: #dc3545;
-            }
-        </style>
-    </head>
-
-    <body>
-        <header>
-            <div class="logo">Edu<span>Vote</span></div>
-            <nav>
-                <a href="homePage.php">Home</a>
-                <a href="login.php">Login</a>
-            </nav>
-        </header>
-
-        <div class="auth-container">
-            <div class="auth-box">
-                <h1>Student Registration</h1>
-
-                <?php if (!empty($errors)): ?>
-                    <div class="error">
-                        <?php foreach ($errors as $error): ?>
-                            <p><?= htmlspecialchars($error) ?></p>
-                        <?php endforeach; ?>
+                <div class="form-group">
+                    <label for="password">Create Password</label>
+                    <input type="password" id="password" name="password" class="form-input" required 
+                           placeholder="At least 8 characters"
+                           oninput="validatePassword()">
+                    <button type="button" class="password-toggle" onclick="togglePasswordVisibility('password')">Show</button>
+                    <span class="feedback" id="password_feedback"></span>
+                    <div class="strength-meter">
+                        <div class="strength-meter-bar" id="strengthMeterBar"></div>
                     </div>
-                <?php endif; ?>
+                </div>
 
-                <form action="register.php" method="post" id="registrationForm">
-                    <div class="form-group">
-                        <label for="full-name" class="required">Full Name</label>
-                        <input type="text" id="full-name" name="full_name" required oninput="validateInput(this, 'full_name'); this.value = this.value.replace(/[^a-zA-Z ]/g, '').toUpperCase()">
-                        <span class="feedback" id="full_name_feedback"></span>
-                    </div>
+                <div class="form-group">
+                    <label for="confirm-password">Confirm Password</label>
+                    <input type="password" id="confirm-password" name="confirm_password" class="form-input" required 
+                           placeholder="Re-enter your password"
+                           oninput="validateConfirmPassword()">
+                    <button type="button" class="password-toggle" onclick="togglePasswordVisibility('confirm-password')">Show</button>
+                    <span class="feedback" id="confirm_password_feedback"></span>
+                </div>
 
-                    <div class="form-group">
-                        <label for="student-id" class="required">Student ID</label>
-                        <!-- Allow a-z and A-Z, then convert to uppercase -->
-                        <input type="text" id="student-id" name="student_id" required 
-                               oninput="validateInput(this, 'student_id'); this.value = this.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();">
-                        <span class="feedback" id="student_id_feedback"></span>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="email" class="required">Email</label>
-                        <input type="email" id="email" name="email" placeholder="example@student.tarc.edu.my." required oninput="validateInput(this, 'email')">
-                        <span class="feedback" id="email_feedback"></span>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="program" class="required">Program of Study</label>
-                        <select id="program" name="program" required onchange="validateInput(this, 'program')">
-                            <option value="">Select your program</option>
-                            <option value="Computer Science" <?php if (isset($_POST['program']) && $_POST['program'] === 'Computer Science') echo 'selected'; ?>>Computer Science</option>
-                            <option value="Engineering" <?php if (isset($_POST['program']) && $_POST['program'] === 'Engineering') echo 'selected'; ?>>Engineering</option>
-                            <option value="Business" <?php if (isset($_POST['program']) && $_POST['program'] === 'Business') echo 'selected'; ?>>Business</option>
-                            <option value="Arts & Humanities" <?php if (isset($_POST['program']) && $_POST['program'] === 'Arts & Humanities') echo 'selected'; ?>>Arts & Humanities</option>
-                            <option value="Natural Sciences" <?php if (isset($_POST['program']) && $_POST['program'] === 'Natural Sciences') echo 'selected'; ?>>Natural Sciences</option>
-                            <option value="Other" <?php if (isset($_POST['program']) && $_POST['program'] === 'Other') echo 'selected'; ?>>Other</option>
-                        </select>
-                        <span class="feedback" id="program_feedback"></span>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="password" class="required">Password</label>
-                        <input type="password" id="password" name="password" required oninput="validatePassword()">
-                        <span class="feedback" id="password_feedback"></span>
-                        <div class="strength-meter" id="strengthMeter">
-                            <div class="strength-meter-bar" id="strengthMeterBar"></div>
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="confirm-password" class="required">Confirm Password</label>
-                        <input type="password" id="confirm-password" name="confirm_password" required oninput="validateConfirmPassword()">
-                        <span class="feedback" id="confirm_password_feedback"></span>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="date-of-birth" class="required">Date of Birth</label>
-                        <input type="date" id="date-of-birth" name="date_of_birth" required oninput="validateInput(this, 'date_of_birth')">
-                        <span class="feedback" id="date_of_birth_feedback"></span>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="student-status" class="required">Student Status</label>
-                        <select id="student-status" name="student_status" required onchange="validateInput(this, 'student_status')">
-                            <option value="">Select Status</option>
-                            <option value="Current Student">Current Student</option>
-                            <option value="Alumni">Alumni</option>
-                        </select>
-                        <span class="feedback" id="student_status_feedback"></span>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="security-question" class="required">Security Question</label>
-                        <select id="security-question" name="security_question" required onchange="validateInput(this, 'security_question')">
-                            <option value="">Select a question</option>
-                            <option value="What is your mother's maiden name?">What is your mother's maiden name?</option>
-                            <option value="What was your first pet's name?">What was your first pet's name?</option>
-                            <option value="What is your favorite book?">What is your favorite book?</option>
-                            <option value="What city were you born in?">What city were you born in?</option>
-                        </select>
-                        <span class="feedback" id="security_question_feedback"></span>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="security-answer" class="required">Security Answer</label>
-                        <input type="text" id="security-answer" name="security_answer" maxlength="255" required oninput="validateInput(this, 'security_answer')">
-                        <span class="feedback" id="security_answer_feedback"></span>
-                    </div>
-
-                    <!-- Billing Address -->
-                    <div class="form-group">
-                        <label for="billing-address" class="required">Billing Address</label>
-                        <textarea id="billing-address" name="billing_address" maxlength="255" required 
-                                  oninput="validateInput(this, 'billing_address')"></textarea>
-                        <span class="feedback" id="billing_address_feedback"></span>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="current-address" class="required">Current Address</label>
-                        <textarea id="current-address" name="current_address" maxlength="255" required oninput="validateInput(this, 'current_address')"></textarea>
-                        <span class="feedback" id="current_address_feedback"></span>
-                    </div>
-
-                    <button type="submit" class="btn">Register</button>
-                </form>
+                <button type="submit" class="btn">Register</button>
 
                 <div class="auth-links">
                     <a href="login.php">Already have an account? Login</a>
                 </div>
-            </div>
+            </form>
         </div>
+    </div>
 
-        <div class="form-group">
-            <div class="<?= $errors ? 'error' : ($success ? 'success' : '') ?>">
-                <input type="text" name="input_field" placeholder="Input field" class="form-input" oninput="validateInput(this)">
-                <i class="fa <?= $errors ? 'fa-exclamation-circle' : ($success ? 'fa-check-circle' : '') ?>"></i>
-                <p><?= $errors[0] ?? '' ?></p>
-            </div>
-        </div>
-
-        <footer>
-            <p>&copy; <?= date('Y') ?> EduVote. All rights reserved.</p>
-        </footer>
-
-        <script>
-            document.getElementById('registrationForm').addEventListener('submit', function (e) {
-                e.preventDefault();
-                grecaptcha.ready(function () {
-                    grecaptcha.execute('6LfLcC0rAAAAAG3ZmASAUwWVyYf4dY4GBNmZRZFj', {action: 'register'}).then(function (token) {
-                        var form = document.getElementById('registrationForm');
-                        var input = document.createElement('input');
-                        input.type = 'hidden';
-                        input.name = 'g-recaptcha-response';
-                        input.value = token;
-                        form.appendChild(input);
-                        form.submit();
-                    });
-                });
-            });
-
-            // Password show/hide
-            function togglePassword() {
-                var pwd = document.getElementById('password');
-                pwd.type = pwd.type === 'password' ? 'text' : 'password';
-            }
-
-            // General input validation function
-            function validateInput(input, fieldName) {
-                const feedback = document.getElementById(`${fieldName}_feedback`);
-                const value = input.value;
-                let errorMessage = '';
-
-                if (input.tagName === 'SELECT' && value === '') {
-                    errorMessage = 'This field is required.';
-                } else if (input.type === 'text' || input.type === 'textarea') {
-                    if (value === '') {
-                        errorMessage = 'This field is required.';
-                    } else if (fieldName === 'student_id') {
-                        // Check length: Must be more than 10 characters (== 10)
-                        if (value.length !== 10) {
-                            errorMessage = 'Student ID must be more than 10 characters.';
-                        } else {
-                            // Check for special characters (only allow A-Z and 0-9)
-                            const specialCharRegex = /[^A-Z0-9]/; // Input is uppercase (from toUpperCase())
-                            if (specialCharRegex.test(value)) {
-                                errorMessage = 'Student ID cannot contain special characters (only letters and numbers allowed).';
-                            } else if (!/[A-Z]/.test(value) || !/[0-9]/.test(value)) {
-                                errorMessage = 'Student ID must contain both letters and numbers.';
-                            }
-                        }
-                    } else if (fieldName === 'security_answer') {
-                        const specialCharRegex = /[^a-zA-Z0-9]/;
-                        if (specialCharRegex.test(value)) {
-                            errorMessage = "Security answer cannot contain special characters (only letters and numbers allowed).";
-                        }
-                    } else if (fieldName === 'billing_address') {
-                        const allowedCharsRegex = /^[a-zA-Z0-9 ,.-]+$/; // Allow , . -
-                        if (!allowedCharsRegex.test(value)) {
-                            errorMessage = "Billing address may only contain letters, numbers, spaces, commas, periods, and hyphens.";
-                        }
-                    }
-
-                }
-
-                if (errorMessage) {
-                    feedback.textContent = `⚠️ ${errorMessage}`;
-                    input.classList.add('invalid');
-                    input.classList.remove('valid');
-                } else {
-                    feedback.textContent = '';
-                    input.classList.add('valid');
-                    input.classList.remove('invalid');
-                }
-            }
-
-// Password validation
-            function validatePassword() {
-                const password = document.getElementById('password');
-                const passwordFeedback = document.getElementById('password_feedback');
-                const val = password.value;
-                let strength = 0;
-                if (val.length >= 8)
-                    strength++;
-                if (/[A-Z]/.test(val))
-                    strength++;
-                if (/[a-z]/.test(val))
-                    strength++;
-                if (/[0-9]/.test(val))
-                    strength++;
-                if (/[^a-zA-Z0-9]/.test(val))
-                    strength++;
-
-                let errorMessage = '';
-                if (val.length < 8) {
-                    errorMessage = 'Password must be at least 8 characters.';
-                } else if (!/[A-Z]/.test(val)) {
-                    errorMessage = 'Include an uppercase letter.';
-                } else if (!/[a-z]/.test(val)) {
-                    errorMessage = 'Include a lowercase letter.';
-                } else if (!/[0-9]/.test(val)) {
-                    errorMessage = 'Include a number.';
-                } else if (!/[^a-zA-Z0-9]/.test(val)) {
-                    errorMessage = 'Include a symbol.';
-                }
-
-                if (errorMessage) {
-                    passwordFeedback.textContent = `⚠️ ${errorMessage}`;
-                    password.classList.add('invalid');
-                    password.classList.remove('valid');
-                } else {
-                    passwordFeedback.textContent = '';
-                    password.classList.add('valid');
-                    password.classList.remove('invalid');
-                }
-            }
-
-// Confirm password validation
-            function validateConfirmPassword() {
-                const password = document.getElementById('password');
-                const confirmPassword = document.getElementById('confirm-password');
-                const confirmPasswordFeedback = document.getElementById('confirm_password_feedback');
-                if (confirmPassword.value !== password.value) {
-                    confirmPasswordFeedback.textContent = '⚠️ Passwords do not match.';
-                    confirmPassword.classList.add('invalid');
-                    confirmPassword.classList.remove('valid');
-                } else {
-                    confirmPasswordFeedback.textContent = '';
-                    confirmPassword.classList.add('valid');
-                    confirmPassword.classList.remove('invalid');
-                }
-            }
-
-            function updateStrengthMeter() {
-                const password = document.getElementById('password').value;
-                let strength = 0;
-                if (password.length >= 8) strength++;
-                if (/[A-Z]/.test(password)) strength++;
-                if (/[a-z]/.test(password)) strength++;
-                if (/[0-9]/.test(password)) strength++;
-                if (/[^a-zA-Z0-9]/.test(password)) strength++;
-                const meter = document.getElementById('strengthMeterBar');
-                meter.style.width = (strength * 20) + '%';
-                meter.className = 'strength-meter-bar ' +
-                    (strength <= 2 ? 'strength-weak' : strength <= 4 ? 'strength-medium' : 'strength-strong');
-            }
-            document.getElementById('password').addEventListener('input', updateStrengthMeter);
-        </script>
-    </body>
-
-</html>   
+    <footer>
+        <p>&copy; 2024 EduVote - Campus Voting System</p>
+        <p>Contact: <a href="mailto:support@eduvote.edu" style="color: white;">support@eduvote.edu</a></p>
+    </footer>
+</body>
+</html>
