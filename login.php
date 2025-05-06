@@ -7,6 +7,11 @@ if (!isset($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32)); // 32字节随机字符串（64字符）
 }
 
+$welcome_message = '';
+if (isset($_SESSION['welcome_message'])) {
+    $welcome_message = $_SESSION['welcome_message'];
+    unset($_SESSION['welcome_message']); // Show only once
+}
 
 // Redirect to homepage if already logged in
 if (isset($_SESSION['user_id'])) {
@@ -68,14 +73,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 $_SESSION['login_attempts']++;
             }
             $_SESSION['last_attempt'] = time();
+        }
     }
     
-            }
-
-        // 3. 后续输入验证（仅当 CSRF 和 reCAPTCHA 均通过时）
-        if (empty($error)) {
-            $student_id = trim($_POST['student_id']);
-            $password = $_POST['password'];
+    // 3. 后续输入验证（仅当 CSRF 和 reCAPTCHA 均通过时）
+    if (empty($error)) {
+        $student_id = trim($_POST['student_id']);
+        $password = $_POST['password'];
 
         // Validate inputs
         if (empty($student_id) || empty($password)) {
@@ -100,6 +104,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                         $_SESSION['user_id'] = $user['user_id'];
                         $_SESSION['student_id'] = $user['student_id'];
                         $_SESSION['is_admin'] = $user['is_admin'];
+                        $_SESSION['welcome_message'] = "Welcome, " . htmlspecialchars($user['student_id']) . "!";
 
                         // Redirect to appropriate page based on user type
                         if ($user['is_admin']) {
@@ -335,6 +340,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 <?php if (!empty($error)): ?>
                     <p style="color: red; text-align: center;"><?php echo htmlspecialchars($error); ?></p>
                 <?php endif; ?>
+                <?php if (!empty($welcome_message)): ?>
+                    <div class="success" style="text-align:center;"><?php echo $welcome_message; ?></div>
+                <?php endif; ?>
                 <form method="post" action="login.php" id="loginForm">
                    <!-- CSRFToken hidden word -->
     <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
@@ -348,6 +356,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     <div class="form-group">
                         <label for="password">Password</label>
                         <input type="password" id="password" name="password" required placeholder="Enter your password">
+                        <button type="button" onclick="togglePasswordVisibility('password')">Show</button>
                     </div>
 
                     <button type="submit" class="btn">Login</button>
@@ -399,6 +408,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 tab.classList.remove('active');
             });
             document.querySelectorAll('.tab')[1].classList.add('active');
+        }
+
+        function togglePasswordVisibility(fieldId) {
+            const input = document.getElementById(fieldId);
+            if (input.type === 'password') {
+                input.type = 'text';
+            } else {
+                input.type = 'password';
+            }
         }
     </script>
 </body>
